@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Chess.com-Hack
 // @namespace    github.com/longkidkoolstar
-// @version      1.2.7
-// @description  Chess.com Bot/Cheat that finds the best move!
+// @version      1.3.0
+// @description  Chess.com Bot/Cheat that finds the best move with evaluation bar and ELO control!
 // @author      longkidkoolstar
 // @license      Chess.com Bot/Cheat © 2023 by MrAuzzie#998142, © All Rights Reserved
 // @match       https://www.chess.com/play/*
@@ -20,7 +20,7 @@
 // ==/UserScript==
 
 
-const currentVersion = '1.2.9.3'; // Sets the current version
+const currentVersion = '1.3.0'; // Sets the current version
 
 function main() {
 
@@ -30,8 +30,13 @@ function main() {
     myVars.autoMovePiece = false;
     myVars.autoRun = false;
     myVars.delay = 0.1;
+    myVars.eloRating = 1500; // Default ELO rating
+    myVars.currentEvaluation = 0; // Current evaluation value
     var myFunctions = document.myFunctions = {};
 
+    // Create evaluation bar
+    var evalBar = null;
+    var evalText = null;
 
     stop_b = stop_w = 0;
     s_br = s_br2 = s_wr = s_wr2 = 0;
@@ -276,6 +281,62 @@ function main() {
             myFunctions.color(e.data.split(' ')[1]);
             isThinking = false;
         }
+        // Parse evaluation information
+        if(e.data.includes('info') && e.data.includes('score cp')) {
+            try {
+                const parts = e.data.split(' ');
+                const cpIndex = parts.indexOf('cp');
+                if(cpIndex !== -1 && parts[cpIndex + 1]) {
+                    const evalValue = parseInt(parts[cpIndex + 1]) / 100; // Convert centipawns to pawns
+                    myVars.currentEvaluation = evalValue;
+                    updateEvalBar(evalValue);
+                }
+            } catch (err) {
+                console.log('Error parsing evaluation:', err);
+            }
+        }
+        // Parse mate information
+        if(e.data.includes('info') && e.data.includes('score mate')) {
+            try {
+                const parts = e.data.split(' ');
+                const mateIndex = parts.indexOf('mate');
+                if(mateIndex !== -1 && parts[mateIndex + 1]) {
+                    const movesToMate = parseInt(parts[mateIndex + 1]);
+                    const evalText = movesToMate > 0 ? `Mate in ${movesToMate}` : `Mate in ${Math.abs(movesToMate)}`;
+                    updateEvalBar(movesToMate > 0 ? 20 : -20, evalText); // Use a large value to show mate
+                }
+            } catch (err) {
+                console.log('Error parsing mate:', err);
+            }
+        }
+    }
+
+    // Function to update the evaluation bar
+    function updateEvalBar(evalValue, mateText = null) {
+        if(!evalBar || !evalText) return;
+        
+        // Clamp the visual representation between -5 and 5
+        const clampedEval = Math.max(-5, Math.min(5, evalValue));
+        const percentage = 50 + (clampedEval * 10); // Convert to percentage (0-100)
+        
+        evalBar.style.height = `${percentage}%`;
+        
+        // Update color based on who's winning
+        if(evalValue > 0.2) {
+            evalBar.style.backgroundColor = '#4CAF50'; // Green for white advantage
+        } else if(evalValue < -0.2) {
+            evalBar.style.backgroundColor = '#F44336'; // Red for black advantage
+        } else {
+            evalBar.style.backgroundColor = '#9E9E9E'; // Grey for equal
+        }
+        
+        // Update evaluation text
+        if(mateText) {
+            evalText.textContent = mateText;
+        } else {
+            const sign = evalValue > 0 ? '+' : '';
+            evalText.textContent = `${sign}${evalValue.toFixed(1)}`;
+        }
     }
 
     myFunctions.reloadChessEngine = function() {
@@ -302,8 +363,37 @@ function main() {
             };
 
             engine.engine.postMessage('ucinewgame');
+            
+            // Set ELO if specified
+            if(myVars.eloRating) {
+                setEngineElo(myVars.eloRating);
+            }
         }
         console.log('loaded chess engine');
+    }
+
+    // Function to set engine ELO
+    function setEngineElo(elo) {
+        if(!engine.engine) return;
+        
+        // Stockfish supports UCI_Elo option to limit playing strength
+        engine.engine.postMessage(`setoption name UCI_Elo value ${elo}`);
+        
+        // Also set UCI_LimitStrength to true to enable ELO limiting
+        engine.engine.postMessage('setoption name UCI_LimitStrength value true');
+        
+        console.log(`Engine ELO set to ${elo}`);
+    }
+
+    // Function to update engine ELO from UI
+    myFunctions.updateEngineElo = function() {
+        const eloValue = parseInt($('#eloSlider')[0].value);
+        $('#eloValue')[0].textContent = eloValue;
+        myVars.eloRating = eloValue;
+        
+        if(engine.engine) {
+            setEngineElo(eloValue);
+        }
     }
 
     var lastValue = 11;
@@ -452,15 +542,70 @@ function main() {
             board = $('chess-board')[0] || $('wc-chess-board')[0];
             myVars.board = board;
 
+            // Create evaluation bar container
+            var evalBarContainer = document.createElement('div');
+            evalBarContainer.id = 'evalBarContainer';
+            evalBarContainer.style = `
+                position: absolute;
+                left: -30px;
+                top: 0;
+                width: 20px;
+                height: 100%;
+                background-color: #f0f0f0;
+                border: 1px solid #ccc;
+                overflow: hidden;
+            `;
+            
+            // Create the actual evaluation bar
+            evalBar = document.createElement('div');
+            evalBar.id = 'evalBar';
+            evalBar.style = `
+                position: absolute;
+                bottom: 0;
+                width: 100%;
+                height: 50%;
+                background-color: #9E9E9E;
+                transition: height 0.3s, background-color 0.3s;
+            `;
+            
+            // Create evaluation text
+            evalText = document.createElement('div');
+            evalText.id = 'evalText';
+            evalText.style = `
+                position: absolute;
+                top: -25px;
+                width: 100%;
+                text-align: center;
+                font-weight: bold;
+                font-size: 14px;
+            `;
+            evalText.textContent = '0.0';
+            
+            // Add elements to the DOM
+            evalBarContainer.appendChild(evalBar);
+            board.parentElement.style.position = 'relative';
+            board.parentElement.appendChild(evalBarContainer);
+            board.parentElement.appendChild(evalText);
+
             var div = document.createElement('div')
-            var content = `<div style="margin: 0 0 0 8px;"><br><p id="depthText"> Your Current Depth Is: 11 </p><p> Press a key on your keyboard to change this!</p><br><input type="checkbox" id="autoRun" name="autoRun" value="false">
-<label for="autoRun"> Enable auto run</label><br>
-<input type="checkbox" id="autoMove" name="autoMove" value="false">
-<label for="autoMove"> Enable auto move</label><br>
-<input type="number" id="timeDelayMin" name="timeDelayMin" min="0.1" value=0.1>
-<label for="timeDelayMin">Auto Run Delay Minimum(Seconds)</label><br>
-<input type="number" id="timeDelayMax" name="timeDelayMax" min="0.1" value=1>
-<label for="timeDelayMax">Auto Run Delay Maximum(Seconds)</label></div>`
+            var content = `<div style="margin: 0 0 0 8px;"><br>
+            <p id="depthText"> Your Current Depth Is: 11 </p>
+            <p> Press a key on your keyboard to change this!</p><br>
+            
+            <div style="margin-bottom: 15px;">
+                <label for="eloSlider">Engine ELO Rating: <span id="eloValue">1500</span></label><br>
+                <input type="range" id="eloSlider" name="eloSlider" min="1000" max="3000" step="50" value="1500" 
+                       oninput="document.myFunctions.updateEngineElo()" style="width: 80%;">
+            </div>
+            
+            <input type="checkbox" id="autoRun" name="autoRun" value="false">
+            <label for="autoRun"> Enable auto run</label><br>
+            <input type="checkbox" id="autoMove" name="autoMove" value="false">
+            <label for="autoMove"> Enable auto move</label><br>
+            <input type="number" id="timeDelayMin" name="timeDelayMin" min="0.1" value=0.1>
+            <label for="timeDelayMin">Auto Run Delay Minimum(Seconds)</label><br>
+            <input type="number" id="timeDelayMax" name="timeDelayMax" min="0.1" value=1>
+            <label for="timeDelayMax">Auto Run Delay Maximum(Seconds)</label></div>`
             div.innerHTML = content;
             div.setAttribute('style','background-color:white; height:auto;');
             div.setAttribute('id','settingsContainer');
@@ -610,6 +755,11 @@ function main() {
             myFunctions.spinner();
             if(board.game.getTurn() == board.game.getPlayingAs()){myTurn = true;} else {myTurn = false;}
             $('#depthText')[0].innerHTML = "Your Current Depth Is: <strong>"+lastValue+"</strong>";
+            
+            // Update evaluation bar position if board size changes
+            if(evalBar && evalText && board) {
+                evalText.style.left = `${evalBar.offsetLeft}px`;
+            }
         } else {
             myFunctions.loadEx();
         }
