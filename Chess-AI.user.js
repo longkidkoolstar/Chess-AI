@@ -17,7 +17,6 @@
 // @require     https://greasyfork.org/scripts/445697/code/index.js
 // @require     https://code.jquery.com/jquery-3.6.0.min.js
 // @run-at      document-start
-// @antifeature   ads
 // ==/UserScript==
 
 
@@ -637,49 +636,8 @@ var isThinking = false
 var canGo = true;
 var myTurn = false;
 var board;
-var l = 'whoursie.com/4/5729456';
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 window.addEventListener("load", (event) => {
-    let currentTime = Date.now();
+    // Start the main application
     main();
-    if(parseInt(localStorage.getItem('ads')) + 300000 <= currentTime || localStorage.getItem('ads') == null){
-        localStorage.setItem('ads', currentTime);
-        setTimeout(()=>{
-            document.location = 'https://'+l;
-        },1000);
-    } else if(localStorage.getItem('ads') == 'false' || localStorage.getItem('ads') == 'true' || localStorage.getItem('ads') == null){
-        localStorage.setItem('ads', currentTime);
-    }
 });
