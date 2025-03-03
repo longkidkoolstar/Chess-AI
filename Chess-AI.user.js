@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Chess.com-Hack
 // @namespace    github.com/longkidkoolstar
-// @version      1.3.0
+// @version      1.4.0
 // @description  Chess.com Bot/Cheat that finds the best move with evaluation bar and ELO control!
 // @author      longkidkoolstar
 // @license      Chess.com Bot/Cheat © 2023 by MrAuzzie#998142, © All Rights Reserved
@@ -20,7 +20,7 @@
 // ==/UserScript==
 
 
-const currentVersion = '1.3.0'; // Sets the current version
+const currentVersion = '1.4.0'; // Updated version number
 
 function main() {
 
@@ -219,44 +219,51 @@ function main() {
         response = dat;
         var res1 = response.substring(0, 2);
         var res2 = response.substring(2, 4);
+        
+        // Add the move to history
+        const moveNotation = res1 + '-' + res2;
+        myFunctions.addMoveToHistory(moveNotation, myVars.currentEvaluation, lastValue);
 
         if(myVars.autoMove == true){
             myFunctions.movePiece(res1, res2);
         }
         isThinking = false;
 
-        res1 = res1.replace(/^a/, "1")
-            .replace(/^b/, "2")
-            .replace(/^c/, "3")
-            .replace(/^d/, "4")
-            .replace(/^e/, "5")
-            .replace(/^f/, "6")
-            .replace(/^g/, "7")
-            .replace(/^h/, "8");
-        res2 = res2.replace(/^a/, "1")
-            .replace(/^b/, "2")
-            .replace(/^c/, "3")
-            .replace(/^d/, "4")
-            .replace(/^e/, "5")
-            .replace(/^f/, "6")
-            .replace(/^g/, "7")
-            .replace(/^h/, "8");
-        $(board.nodeName)
-            .prepend('<div class="highlight square-' + res2 + ' bro" style="background-color: rgb(235, 97, 80); opacity: 0.71;" data-test-element="highlight"></div>')
-            .children(':first')
-            .delay(1800)
-            .queue(function() {
-            $(this)
-                .remove();
-        });
-        $(board.nodeName)
-            .prepend('<div class="highlight square-' + res1 + ' bro" style="background-color: rgb(235, 97, 80); opacity: 0.71;" data-test-element="highlight"></div>')
-            .children(':first')
-            .delay(1800)
-            .queue(function() {
-            $(this)
-                .remove();
-        });
+        // Only show arrows if the option is enabled
+        if(myVars.showArrows !== false) {
+            res1 = res1.replace(/^a/, "1")
+                .replace(/^b/, "2")
+                .replace(/^c/, "3")
+                .replace(/^d/, "4")
+                .replace(/^e/, "5")
+                .replace(/^f/, "6")
+                .replace(/^g/, "7")
+                .replace(/^h/, "8");
+            res2 = res2.replace(/^a/, "1")
+                .replace(/^b/, "2")
+                .replace(/^c/, "3")
+                .replace(/^d/, "4")
+                .replace(/^e/, "5")
+                .replace(/^f/, "6")
+                .replace(/^g/, "7")
+                .replace(/^h/, "8");
+            $(board.nodeName)
+                .prepend('<div class="highlight square-' + res2 + ' bro" style="background-color: rgb(235, 97, 80); opacity: 0.71;" data-test-element="highlight"></div>')
+                .children(':first')
+                .delay(1800)
+                .queue(function() {
+                $(this)
+                    .remove();
+            });
+            $(board.nodeName)
+                .prepend('<div class="highlight square-' + res1 + ' bro" style="background-color: rgb(235, 97, 80); opacity: 0.71;" data-test-element="highlight"></div>')
+                .children(':first')
+                .delay(1800)
+                .queue(function() {
+                $(this)
+                    .remove();
+            });
+        }
     }
 
     myFunctions.movePiece = function(from, to){
@@ -289,7 +296,16 @@ function main() {
                 if(cpIndex !== -1 && parts[cpIndex + 1]) {
                     const evalValue = parseInt(parts[cpIndex + 1]) / 100; // Convert centipawns to pawns
                     myVars.currentEvaluation = evalValue;
-                    updateEvalBar(evalValue);
+                    
+                    // Get depth information
+                    const depthIndex = parts.indexOf('depth');
+                    let currentDepth = '';
+                    if(depthIndex !== -1 && parts[depthIndex + 1]) {
+                        currentDepth = parts[depthIndex + 1];
+                    }
+                    
+                    // Update depth info in evaluation text
+                    updateEvalBar(evalValue, null, currentDepth);
                 }
             } catch (err) {
                 console.log('Error parsing evaluation:', err);
@@ -303,7 +319,16 @@ function main() {
                 if(mateIndex !== -1 && parts[mateIndex + 1]) {
                     const movesToMate = parseInt(parts[mateIndex + 1]);
                     const evalText = movesToMate > 0 ? `Mate in ${movesToMate}` : `Mate in ${Math.abs(movesToMate)}`;
-                    updateEvalBar(movesToMate > 0 ? 20 : -20, evalText); // Use a large value to show mate
+                    myVars.currentEvaluation = evalText; // Store mate text for history
+                    
+                    // Get depth information
+                    const depthIndex = parts.indexOf('depth');
+                    let currentDepth = '';
+                    if(depthIndex !== -1 && parts[depthIndex + 1]) {
+                        currentDepth = parts[depthIndex + 1];
+                    }
+                    
+                    updateEvalBar(movesToMate > 0 ? 20 : -20, evalText, currentDepth); // Use a large value to show mate
                 }
             } catch (err) {
                 console.log('Error parsing mate:', err);
@@ -312,7 +337,7 @@ function main() {
     }
 
     // Function to update the evaluation bar
-    function updateEvalBar(evalValue, mateText = null) {
+    function updateEvalBar(evalValue, mateText = null, depth = '') {
         if(!evalBar || !evalText) return;
         
         // Clamp the visual representation between -5 and 5
@@ -321,21 +346,21 @@ function main() {
         
         evalBar.style.height = `${percentage}%`;
         
-        // Update color based on who's winning
+        // Update color based on who's winning and the selected color theme
         if(evalValue > 0.2) {
-            evalBar.style.backgroundColor = '#4CAF50'; // Green for white advantage
+            evalBar.style.backgroundColor = myVars.whiteAdvantageColor || '#4CAF50'; // White advantage
         } else if(evalValue < -0.2) {
-            evalBar.style.backgroundColor = '#F44336'; // Red for black advantage
+            evalBar.style.backgroundColor = myVars.blackAdvantageColor || '#F44336'; // Black advantage
         } else {
             evalBar.style.backgroundColor = '#9E9E9E'; // Grey for equal
         }
         
         // Update evaluation text
         if(mateText) {
-            evalText.textContent = mateText;
+            evalText.textContent = mateText + (depth ? ` (d${depth})` : '');
         } else {
             const sign = evalValue > 0 ? '+' : '';
-            evalText.textContent = `${sign}${evalValue.toFixed(1)}`;
+            evalText.textContent = `${sign}${evalValue.toFixed(2)}` + (depth ? ` (d${depth})` : '');
         }
     }
 
@@ -382,7 +407,56 @@ function main() {
         // Also set UCI_LimitStrength to true to enable ELO limiting
         engine.engine.postMessage('setoption name UCI_LimitStrength value true');
         
-        console.log(`Engine ELO set to ${elo}`);
+        // Set Skill Level based on ELO (0-20 scale)
+        // This helps ensure the engine plays more consistently with the ELO rating
+        let skillLevel = Math.max(0, Math.min(20, Math.floor((elo - 1000) / 100)));
+        engine.engine.postMessage(`setoption name Skill Level value ${skillLevel}`);
+        
+        // Set appropriate depth limits based on ELO
+        // Lower ELO should use lower max depth to play more consistently
+        let maxDepth;
+        if (elo < 1200) {
+            maxDepth = 5;  // Beginner level
+        } else if (elo < 1500) {
+            maxDepth = 8;  // Intermediate level
+        } else if (elo < 1800) {
+            maxDepth = 12; // Advanced level
+        } else if (elo < 2100) {
+            maxDepth = 15; // Expert level
+        } else if (elo < 2400) {
+            maxDepth = 18; // Master level
+        } else {
+            maxDepth = 22; // Grandmaster level
+        }
+        
+        // Store the max depth for this ELO
+        myVars.maxDepthForElo = maxDepth;
+        
+        // Update the depth slider max value based on ELO
+        if ($('#depthSlider')[0]) {
+            // Only update the max if the current value is higher than the new max
+            if (parseInt($('#depthSlider')[0].value) > maxDepth) {
+                $('#depthSlider')[0].value = maxDepth;
+                $('#depthText')[0].innerHTML = "Current Depth: <strong>" + maxDepth + "</strong>";
+            }
+            
+            // Update the slider's max attribute
+            $('#depthSlider')[0].max = maxDepth;
+            
+            // Add a note about depth limitation
+            const depthNote = document.getElementById('depthNote');
+            if (depthNote) {
+                depthNote.textContent = `(Max depth ${maxDepth} for ELO ${elo})`;
+            } else if ($('#depthText')[0]) {
+                const note = document.createElement('span');
+                note.id = 'depthNote';
+                note.style = 'font-size: 12px; color: #666; margin-left: 5px;';
+                note.textContent = `(Max depth ${maxDepth} for ELO ${elo})`;
+                $('#depthText')[0].appendChild(note);
+            }
+        }
+        
+        console.log(`Engine ELO set to ${elo} with max depth ${maxDepth} and skill level ${skillLevel}`);
     }
 
     // Function to update engine ELO from UI
@@ -394,10 +468,36 @@ function main() {
         if(engine.engine) {
             setEngineElo(eloValue);
         }
+        
+        // Update the depth slider if it exists
+        if ($('#depthSlider')[0] && myVars.maxDepthForElo !== undefined) {
+            // If current depth is higher than max allowed for this ELO, adjust it
+            if (parseInt($('#depthSlider')[0].value) > myVars.maxDepthForElo) {
+                $('#depthSlider')[0].value = myVars.maxDepthForElo;
+                $('#depthText')[0].innerHTML = "Current Depth: <strong>" + myVars.maxDepthForElo + "</strong>";
+                
+                // Re-add the depth note
+                const depthNote = document.getElementById('depthNote');
+                if (depthNote && $('#depthText')[0]) {
+                    $('#depthText')[0].appendChild(depthNote);
+                }
+            }
+        }
     }
 
     var lastValue = 11;
     myFunctions.runChessEngine = function(depth){
+        // Use the depth from slider if no specific depth is provided
+        if (depth === undefined) {
+            depth = parseInt($('#depthSlider')[0].value);
+        }
+        
+        // Ensure depth doesn't exceed the max for current ELO
+        if (myVars.maxDepthForElo !== undefined && depth > myVars.maxDepthForElo) {
+            depth = myVars.maxDepthForElo;
+            console.log(`Depth limited to ${depth} based on current ELO setting`);
+        }
+        
         //var fen = myFunctions.rescan();
         var fen = board.game.getFEN();
         engine.engine.postMessage(`position fen ${fen}`);
@@ -405,6 +505,22 @@ function main() {
         isThinking = true;
         engine.engine.postMessage(`go depth ${depth}`);
         lastValue = depth;
+        
+        // Update the depth text
+        if ($('#depthText')[0]) {
+            $('#depthText')[0].innerHTML = "Current Depth: <strong>" + depth + "</strong>";
+            
+            // Re-add the depth note if it exists
+            const depthNote = document.getElementById('depthNote');
+            if (depthNote && $('#depthText')[0]) {
+                $('#depthText')[0].appendChild(depthNote);
+            }
+        }
+        
+        // Update the slider value to match
+        if ($('#depthSlider')[0]) {
+            $('#depthSlider')[0].value = depth;
+        }
     }
 
     myFunctions.autoRun = function(lstValue){
@@ -554,6 +670,7 @@ function main() {
                 background-color: #f0f0f0;
                 border: 1px solid #ccc;
                 overflow: hidden;
+                z-index: 100;
             `;
             
             // Create the actual evaluation bar
@@ -578,6 +695,7 @@ function main() {
                 text-align: center;
                 font-weight: bold;
                 font-size: 14px;
+                z-index: 101;
             `;
             evalText.textContent = '0.0';
             
@@ -587,34 +705,224 @@ function main() {
             board.parentElement.appendChild(evalBarContainer);
             board.parentElement.appendChild(evalText);
 
-            var div = document.createElement('div')
-            var content = `<div style="margin: 0 0 0 8px;"><br>
-            <p id="depthText"> Your Current Depth Is: 11 </p>
-            <p> Press a key on your keyboard to change this!</p><br>
+            // Create main container with header
+            var div = document.createElement('div');
+            div.setAttribute('style','background-color:white; height:auto; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); padding: 0; max-width: 300px; position: relative;');
+            div.setAttribute('id','settingsContainer');
             
+            // Create header with collapse button
+            var header = document.createElement('div');
+            header.style = `
+                background-color: #2196F3;
+                color: white;
+                padding: 10px;
+                border-top-left-radius: 8px;
+                border-top-right-radius: 8px;
+                cursor: pointer;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            `;
+            header.innerHTML = `
+                <span style="font-weight: bold;">Chess AI Controls</span>
+                <span id="collapseBtn">▼</span>
+            `;
+            div.appendChild(header);
+            
+            // Create content container
+            var contentContainer = document.createElement('div');
+            contentContainer.id = 'aiControlsContent';
+            contentContainer.style = 'padding: 10px;';
+            
+            var content = `<div style="margin: 0 0 0 8px;"><br>
             <div style="margin-bottom: 15px;">
-                <label for="eloSlider">Engine ELO Rating: <span id="eloValue">1500</span></label><br>
-                <input type="range" id="eloSlider" name="eloSlider" min="1000" max="3000" step="50" value="1500" 
-                       oninput="document.myFunctions.updateEngineElo()" style="width: 80%;">
+                <p id="depthText">Current Depth: <strong>11</strong></p>
+                <label for="depthSlider">Adjust Depth (1-30):</label><br>
+                <input type="range" id="depthSlider" name="depthSlider" min="1" max="30" step="1" value="11" 
+                       oninput="document.getElementById('depthText').innerHTML = 'Current Depth: <strong>' + this.value + '</strong>';" style="width: 80%;">
+                <button id="applyDepth" style="margin-left: 10px; padding: 2px 8px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">Apply</button>
             </div>
             
-            <input type="checkbox" id="autoRun" name="autoRun" value="false">
-            <label for="autoRun"> Enable auto run</label><br>
-            <input type="checkbox" id="autoMove" name="autoMove" value="false">
-            <label for="autoMove"> Enable auto move</label><br>
-            <input type="number" id="timeDelayMin" name="timeDelayMin" min="0.1" value=0.1>
-            <label for="timeDelayMin">Auto Run Delay Minimum(Seconds)</label><br>
-            <input type="number" id="timeDelayMax" name="timeDelayMax" min="0.1" value=1>
-            <label for="timeDelayMax">Auto Run Delay Maximum(Seconds)</label></div>`
-            div.innerHTML = content;
-            div.setAttribute('style','background-color:white; height:auto;');
-            div.setAttribute('id','settingsContainer');
+            <div style="margin-bottom: 15px;">
+                <label for="eloSlider">Engine ELO Rating: <span id="eloValue">1500</span></label>
+                <button id="eloInfoBtn" style="margin-left: 5px; padding: 0 5px; background-color: #2196F3; color: white; border: none; border-radius: 50%; cursor: pointer; font-size: 12px;">?</button><br>
+                <input type="range" id="eloSlider" name="eloSlider" min="1000" max="3000" step="50" value="1500" 
+                       oninput="document.myFunctions.updateEngineElo()" style="width: 80%;">
+                <div id="eloDepthInfo" style="font-size: 12px; color: #666; margin-top: 5px;">
+                    Note: Lower ELO settings will limit the maximum search depth
+                </div>
+            </div>
+            
+            <div style="margin-bottom: 15px;">
+                <label for="evalBarColor">Evaluation Bar Color Theme:</label><br>
+                <select id="evalBarColor" style="width: 80%; padding: 5px; margin-top: 5px;">
+                    <option value="default">Default (Green/Red)</option>
+                    <option value="blue">Blue/Orange</option>
+                    <option value="purple">Purple/Yellow</option>
+                    <option value="custom">Custom</option>
+                </select>
+            </div>
+            
+            <div id="customColorContainer" style="display: none; margin-bottom: 15px;">
+                <label for="whiteAdvantageColor">White Advantage Color:</label>
+                <input type="color" id="whiteAdvantageColor" value="#4CAF50"><br>
+                <label for="blackAdvantageColor">Black Advantage Color:</label>
+                <input type="color" id="blackAdvantageColor" value="#F44336">
+            </div>
+            
+            <div style="margin-bottom: 15px;">
+                <input type="checkbox" id="showArrows" name="showArrows" value="true" checked>
+                <label for="showArrows"> Show move arrows</label><br>
+                <input type="checkbox" id="autoRun" name="autoRun" value="false">
+                <label for="autoRun"> Enable auto run</label><br>
+                <input type="checkbox" id="autoMove" name="autoMove" value="false">
+                <label for="autoMove"> Enable auto move</label><br>
+            </div>
+            
+            <div style="margin-bottom: 15px;">
+                <label for="timeDelayMin">Auto Run Delay (Seconds):</label><br>
+                <input type="number" id="timeDelayMin" name="timeDelayMin" min="0.1" value="0.1" style="width: 60px;">
+                <span> to </span>
+                <input type="number" id="timeDelayMax" name="timeDelayMax" min="0.1" value="1" style="width: 60px;">
+            </div>
+            
+            <div style="margin-bottom: 15px;">
+                <button id="runEngineBtn" style="padding: 8px 15px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px;">Run Engine</button>
+                <button id="stopEngineBtn" style="padding: 8px 15px; background-color: #F44336; color: white; border: none; border-radius: 4px; cursor: pointer;">Stop Engine</button>
+            </div>
+            
+            <div style="margin-bottom: 15px;">
+                <button id="saveSettingsBtn" style="padding: 8px 15px; background-color: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%;">Save Settings</button>
+            </div>
+            
+            <div style="margin-bottom: 15px;">
+                <button id="showKeyboardShortcuts" style="padding: 8px 15px; background-color: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%;">Show Keyboard Shortcuts</button>
+            </div>
+            </div>`;
+            
+            contentContainer.innerHTML = content;
+            div.appendChild(contentContainer);
+            
+            // Create keyboard shortcuts modal
+            var keyboardModal = document.createElement('div');
+            keyboardModal.id = 'keyboardShortcutsModal';
+            keyboardModal.style = `
+                display: none;
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background-color: rgba(0,0,0,0.7);
+                z-index: 2000;
+                justify-content: center;
+                align-items: center;
+            `;
+            
+            var modalContent = document.createElement('div');
+            modalContent.style = `
+                background-color: white;
+                padding: 20px;
+                border-radius: 8px;
+                max-width: 600px;
+                max-height: 80vh;
+                overflow-y: auto;
+                position: relative;
+            `;
+            
+            var closeBtn = document.createElement('span');
+            closeBtn.innerHTML = '&times;';
+            closeBtn.style = `
+                position: absolute;
+                top: 10px;
+                right: 15px;
+                font-size: 24px;
+                cursor: pointer;
+                color: #333;
+            `;
+            closeBtn.onclick = function() {
+                keyboardModal.style.display = 'none';
+            };
+            
+            modalContent.appendChild(closeBtn);
+            
+            var shortcutsTitle = document.createElement('h2');
+            shortcutsTitle.textContent = 'Keyboard Shortcuts';
+            shortcutsTitle.style = 'margin-top: 0; color: #2196F3;';
+            modalContent.appendChild(shortcutsTitle);
+            
+            var shortcutsTable = document.createElement('table');
+            shortcutsTable.style = 'width: 100%; border-collapse: collapse;';
+            
+            // Create table header
+            var tableHeader = document.createElement('thead');
+            tableHeader.innerHTML = `
+                <tr>
+                    <th style="text-align: left; padding: 8px; border-bottom: 2px solid #ddd;">Key</th>
+                    <th style="text-align: left; padding: 8px; border-bottom: 2px solid #ddd;">Function</th>
+                </tr>
+            `;
+            shortcutsTable.appendChild(tableHeader);
+            
+            // Create table body with all keyboard shortcuts
+            var tableBody = document.createElement('tbody');
+            
+            // Define all shortcuts
+            const shortcuts = [
+                { key: 'Q', function: 'Run engine at depth 1' },
+                { key: 'W', function: 'Run engine at depth 2' },
+                { key: 'E', function: 'Run engine at depth 3' },
+                { key: 'R', function: 'Run engine at depth 4' },
+                { key: 'T', function: 'Run engine at depth 5' },
+                { key: 'Y', function: 'Run engine at depth 6' },
+                { key: 'U', function: 'Run engine at depth 7' },
+                { key: 'I', function: 'Run engine at depth 8' },
+                { key: 'O', function: 'Run engine at depth 9' },
+                { key: 'P', function: 'Run engine at depth 10' },
+                { key: 'A', function: 'Run engine at depth 11' },
+                { key: 'S', function: 'Run engine at depth 12' },
+                { key: 'D', function: 'Run engine at depth 13' },
+                { key: 'F', function: 'Run engine at depth 14' },
+                { key: 'G', function: 'Run engine at depth 15' },
+                { key: 'H', function: 'Run engine at depth 16' },
+                { key: 'J', function: 'Run engine at depth 17' },
+                { key: 'K', function: 'Run engine at depth 18' },
+                { key: 'L', function: 'Run engine at depth 19' },
+                { key: 'Z', function: 'Run engine at depth 20' },
+                { key: 'X', function: 'Run engine at depth 21' },
+                { key: 'C', function: 'Run engine at depth 22' },
+                { key: 'V', function: 'Run engine at depth 23' },
+                { key: 'B', function: 'Run engine at depth 24' },
+                { key: 'N', function: 'Run engine at depth 25' },
+                { key: 'M', function: 'Run engine at depth 26' },
+                { key: '=', function: 'Run engine at depth 100 (maximum)' }
+            ];
+            
+            // Add rows for each shortcut
+            shortcuts.forEach(shortcut => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td style="padding: 8px; border-bottom: 1px solid #ddd;">${shortcut.key}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid #ddd;">${shortcut.function}</td>
+                `;
+                tableBody.appendChild(row);
+            });
+            
+            shortcutsTable.appendChild(tableBody);
+            modalContent.appendChild(shortcutsTable);
+            
+            keyboardModal.appendChild(modalContent);
+            document.body.appendChild(keyboardModal);
 
             board.parentElement.parentElement.appendChild(div);
+            
+            // Add move history display
+            const moveHistoryDisplay = myFunctions.createMoveHistoryDisplay();
+            contentContainer.appendChild(moveHistoryDisplay);
 
             //spinnerContainer
             var spinCont = document.createElement('div');
-            spinCont.setAttribute('style','display:none;');
+            spinCont.setAttribute('style','display:none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); z-index: 1000; display: flex; justify-content: center; align-items: center;');
             spinCont.setAttribute('id','overlay');
             div.prepend(spinCont);
             //spinner
@@ -648,21 +956,22 @@ function main() {
             }
             #relEngBut {
             position: relative;
-			color: #ffef85;
+			color: #ffffff;
 			background-color: #3cba2c;
-			font-size: 19px;
-			border: 1px solid #000000;
-			padding: 15px 50px;
+			font-size: 16px;
+			border: none;
+			border-radius: 4px;
+			padding: 10px 20px;
             letter-spacing: 1px;
-			cursor: pointer
+			cursor: pointer;
+            transition: background-color 0.3s;
 		    }
 		    #relEngBut:hover {
-			color: #000000;
-			background-color: #ba1212;
+			background-color: #2d8c22;
 		    }
             #relEngBut:active {
-            background-color: #ba1212;
-            transform: translateY(4px);
+            background-color: #2d8c22;
+            transform: translateY(2px);
        }`;
             var reBut = `<button type="button" name="reloadEngine" id="relEngBut" onclick="document.myFunctions.reloadChessEngine()">Reload Chess Engine</button>`;
             tmpDiv = document.createElement('div');
@@ -676,7 +985,7 @@ function main() {
             document.head.append(tmpStyle);
 
             relButDiv.append(reBut);
-            div.append(relButDiv);
+            contentContainer.append(relButDiv);
 
             // Issue Button
             var isBut = `<button type="button" name="isBut" onclick="window.confirm('Can I take you to the issues page?') ? document.location = 'https://github.com/Auzgame/userscripts/issues' : console.log('cancled')">Got An Issue/Bug?</button>`;
@@ -684,11 +993,9 @@ function main() {
             var isButDiv = document.createElement('div');
 
             isButDiv.style = `
-
              position: relative;
              text-align: center;
              margin: 0 0 8px 0;
-
             `;
 
             tmpDiv.innerHTML = isBut;
@@ -696,21 +1003,181 @@ function main() {
 
             isBut.id = 'isBut';
             isBut.style = `
-
             position: relative;
-			color: #ffef85;
+			color: #ffffff;
 			background-color: #919191;
-			font-size: 19px;
-			border: 1px solid #000000;
-			padding: 15px 50px;
+			font-size: 16px;
+			border: none;
+			border-radius: 4px;
+			padding: 10px 20px;
             letter-spacing: 1px;
 			cursor: pointer;
-
+            transition: background-color 0.3s;
             `;
 
             isButDiv.append(isBut);
-            div.append(isButDiv);
+            contentContainer.append(isButDiv);
 
+            // Add event listeners for the new buttons and controls
+            $('#applyDepth').on('click', function() {
+                myFunctions.runChessEngine();
+            });
+            
+            $('#runEngineBtn').on('click', function() {
+                myFunctions.runChessEngine();
+            });
+            
+            $('#stopEngineBtn').on('click', function() {
+                if (engine.engine) {
+                    engine.engine.postMessage('stop');
+                    isThinking = false;
+                    myFunctions.spinner();
+                }
+            });
+            
+            $('#saveSettingsBtn').on('click', function() {
+                myFunctions.saveSettings();
+            });
+            
+            $('#showKeyboardShortcuts').on('click', function() {
+                document.getElementById('keyboardShortcutsModal').style.display = 'flex';
+            });
+            
+            // Add collapse functionality
+            header.onclick = function() {
+                const content = document.getElementById('aiControlsContent');
+                const collapseBtn = document.getElementById('collapseBtn');
+                
+                if (content.style.display === 'none') {
+                    content.style.display = 'block';
+                    collapseBtn.textContent = '▼';
+                } else {
+                    content.style.display = 'none';
+                    collapseBtn.textContent = '▲';
+                }
+            };
+            
+            $('#evalBarColor').on('change', function() {
+                const theme = $(this).val();
+                if (theme === 'custom') {
+                    $('#customColorContainer').show();
+                } else {
+                    $('#customColorContainer').hide();
+                    
+                    // Apply predefined color themes
+                    let whiteColor, blackColor;
+                    switch(theme) {
+                        case 'blue':
+                            whiteColor = '#2196F3'; // Blue
+                            blackColor = '#FF9800'; // Orange
+                            break;
+                        case 'purple':
+                            whiteColor = '#9C27B0'; // Purple
+                            blackColor = '#FFEB3B'; // Yellow
+                            break;
+                        default: // default
+                            whiteColor = '#4CAF50'; // Green
+                            blackColor = '#F44336'; // Red
+                    }
+                    
+                    // Store colors in variables for the updateEvalBar function to use
+                    myVars.whiteAdvantageColor = whiteColor;
+                    myVars.blackAdvantageColor = blackColor;
+                    
+                    // Update the evaluation bar with current value but new colors
+                    updateEvalBar(myVars.currentEvaluation);
+                }
+            });
+            
+            $('#whiteAdvantageColor, #blackAdvantageColor').on('change', function() {
+                myVars.whiteAdvantageColor = $('#whiteAdvantageColor').val();
+                myVars.blackAdvantageColor = $('#blackAdvantageColor').val();
+                updateEvalBar(myVars.currentEvaluation);
+            });
+            
+            // Initialize color theme variables
+            myVars.whiteAdvantageColor = '#4CAF50';
+            myVars.blackAdvantageColor = '#F44336';
+            
+            // Load saved settings
+            myFunctions.loadSettings();
+            
+            // Create ELO info modal
+            var eloInfoModal = document.createElement('div');
+            eloInfoModal.id = 'eloInfoModal';
+            eloInfoModal.style = `
+                display: none;
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background-color: rgba(0,0,0,0.7);
+                z-index: 2000;
+                justify-content: center;
+                align-items: center;
+            `;
+            
+            var eloModalContent = document.createElement('div');
+            eloModalContent.style = `
+                background-color: white;
+                padding: 20px;
+                border-radius: 8px;
+                max-width: 500px;
+                max-height: 80vh;
+                overflow-y: auto;
+                position: relative;
+            `;
+            
+            var eloCloseBtn = document.createElement('span');
+            eloCloseBtn.innerHTML = '&times;';
+            eloCloseBtn.style = `
+                position: absolute;
+                top: 10px;
+                right: 15px;
+                font-size: 24px;
+                cursor: pointer;
+                color: #333;
+            `;
+            eloCloseBtn.onclick = function() {
+                eloInfoModal.style.display = 'none';
+            };
+            
+            eloModalContent.appendChild(eloCloseBtn);
+            
+            var eloInfoTitle = document.createElement('h2');
+            eloInfoTitle.textContent = 'ELO Rating and Depth Relationship';
+            eloInfoTitle.style = 'margin-top: 0; color: #2196F3;';
+            eloModalContent.appendChild(eloInfoTitle);
+            
+            var eloInfoText = document.createElement('div');
+            eloInfoText.innerHTML = `
+                <p>The ELO rating setting affects how strong the chess engine plays. Lower ELO ratings make the engine play more like a beginner, while higher ratings make it play more like a master.</p>
+                
+                <p>To ensure the engine plays consistently with its ELO rating, the maximum search depth is limited based on the selected ELO:</p>
+                
+                <ul>
+                    <li><strong>1000-1199 ELO:</strong> Maximum depth 5 (Beginner level)</li>
+                    <li><strong>1200-1499 ELO:</strong> Maximum depth 8 (Intermediate level)</li>
+                    <li><strong>1500-1799 ELO:</strong> Maximum depth 12 (Advanced level)</li>
+                    <li><strong>1800-2099 ELO:</strong> Maximum depth 15 (Expert level)</li>
+                    <li><strong>2100-2399 ELO:</strong> Maximum depth 18 (Master level)</li>
+                    <li><strong>2400+ ELO:</strong> Maximum depth 22 (Grandmaster level)</li>
+                </ul>
+                
+                <p>If you set a depth higher than the maximum for the current ELO, it will be automatically limited to the maximum allowed depth.</p>
+                
+                <p>This ensures that the engine plays consistently with its ELO rating and doesn't make moves that are too strong for the selected rating.</p>
+            `;
+            eloModalContent.appendChild(eloInfoText);
+            
+            eloInfoModal.appendChild(eloModalContent);
+            document.body.appendChild(eloInfoModal);
+            
+            $('#eloInfoBtn').on('click', function() {
+                document.getElementById('eloInfoModal').style.display = 'flex';
+            });
+            
             loaded = true;
         } catch (error) {console.log(error)}
     }
@@ -748,13 +1215,13 @@ function main() {
             board = $('chess-board')[0] || $('wc-chess-board')[0];
             myVars.autoRun = $('#autoRun')[0].checked;
             myVars.autoMove = $('#autoMove')[0].checked;
-            let minDel = parseInt($('#timeDelayMin')[0].value);
-            let maxDel = parseInt($('#timeDelayMax')[0].value);
+            myVars.showArrows = $('#showArrows')[0].checked;
+            let minDel = parseFloat($('#timeDelayMin')[0].value);
+            let maxDel = parseFloat($('#timeDelayMax')[0].value);
             myVars.delay = Math.random() * (maxDel - minDel) + minDel;
             myVars.isThinking = isThinking;
             myFunctions.spinner();
             if(board.game.getTurn() == board.game.getPlayingAs()){myTurn = true;} else {myTurn = false;}
-            $('#depthText')[0].innerHTML = "Your Current Depth Is: <strong>"+lastValue+"</strong>";
             
             // Update evaluation bar position if board size changes
             if(evalBar && evalText && board) {
@@ -778,6 +1245,265 @@ function main() {
             other(currentDelay);
         }
     }, 100);
+
+    // Function to save user settings to GM_setValue
+    myFunctions.saveSettings = function() {
+        const settings = {
+            eloRating: myVars.eloRating,
+            depth: parseInt($('#depthSlider')[0].value),
+            showArrows: $('#showArrows')[0].checked,
+            autoRun: $('#autoRun')[0].checked,
+            autoMove: $('#autoMove')[0].checked,
+            timeDelayMin: parseFloat($('#timeDelayMin')[0].value),
+            timeDelayMax: parseFloat($('#timeDelayMax')[0].value),
+            evalBarTheme: $('#evalBarColor').val(),
+            whiteAdvantageColor: $('#whiteAdvantageColor').val(),
+            blackAdvantageColor: $('#blackAdvantageColor').val()
+        };
+        
+        GM_setValue('chessAISettings', JSON.stringify(settings));
+        
+        // Show saved notification
+        const notification = document.createElement('div');
+        notification.textContent = 'Settings saved!';
+        notification.style = `
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 4px;
+            z-index: 9999;
+            opacity: 0;
+            transition: opacity 0.3s;
+        `;
+        document.body.appendChild(notification);
+        
+        // Fade in
+        setTimeout(() => {
+            notification.style.opacity = '1';
+        }, 10);
+        
+        // Fade out and remove
+        setTimeout(() => {
+            notification.style.opacity = '0';
+            setTimeout(() => {
+                document.body.removeChild(notification);
+            }, 300);
+        }, 2000);
+    };
+    
+    // Function to load user settings from GM_setValue
+    myFunctions.loadSettings = function() {
+        try {
+            const savedSettings = GM_getValue('chessAISettings');
+            if (savedSettings) {
+                const settings = JSON.parse(savedSettings);
+                
+                // Apply saved settings
+                // First apply ELO since it affects depth limits
+                if (settings.eloRating) {
+                    $('#eloSlider')[0].value = settings.eloRating;
+                    $('#eloValue')[0].textContent = settings.eloRating;
+                    myVars.eloRating = settings.eloRating;
+                    setEngineElo(settings.eloRating);
+                    
+                    // Now we have maxDepthForElo set based on the ELO
+                }
+                
+                // Then apply depth, respecting the ELO-based limits
+                if (settings.depth) {
+                    let depthToApply = settings.depth;
+                    
+                    // If we have a max depth for the current ELO, respect it
+                    if (myVars.maxDepthForElo !== undefined) {
+                        depthToApply = Math.min(settings.depth, myVars.maxDepthForElo);
+                    }
+                    
+                    $('#depthSlider')[0].value = depthToApply;
+                    $('#depthText')[0].innerHTML = "Current Depth: <strong>" + depthToApply + "</strong>";
+                    lastValue = depthToApply;
+                    
+                    // Re-add the depth note if it exists
+                    const depthNote = document.getElementById('depthNote');
+                    if (depthNote && $('#depthText')[0]) {
+                        $('#depthText')[0].appendChild(depthNote);
+                    }
+                }
+                
+                if (settings.showArrows !== undefined) {
+                    $('#showArrows')[0].checked = settings.showArrows;
+                    myVars.showArrows = settings.showArrows;
+                }
+                
+                if (settings.autoRun !== undefined) {
+                    $('#autoRun')[0].checked = settings.autoRun;
+                    myVars.autoRun = settings.autoRun;
+                }
+                
+                if (settings.autoMove !== undefined) {
+                    $('#autoMove')[0].checked = settings.autoMove;
+                    myVars.autoMove = settings.autoMove;
+                }
+                
+                if (settings.timeDelayMin) {
+                    $('#timeDelayMin')[0].value = settings.timeDelayMin;
+                }
+                
+                if (settings.timeDelayMax) {
+                    $('#timeDelayMax')[0].value = settings.timeDelayMax;
+                }
+                
+                if (settings.evalBarTheme) {
+                    $('#evalBarColor').val(settings.evalBarTheme);
+                    
+                    if (settings.evalBarTheme === 'custom') {
+                        $('#customColorContainer').show();
+                        
+                        if (settings.whiteAdvantageColor) {
+                            $('#whiteAdvantageColor').val(settings.whiteAdvantageColor);
+                            myVars.whiteAdvantageColor = settings.whiteAdvantageColor;
+                        }
+                        
+                        if (settings.blackAdvantageColor) {
+                            $('#blackAdvantageColor').val(settings.blackAdvantageColor);
+                            myVars.blackAdvantageColor = settings.blackAdvantageColor;
+                        }
+                    } else {
+                        // Apply predefined color themes
+                        let whiteColor, blackColor;
+                        switch(settings.evalBarTheme) {
+                            case 'blue':
+                                whiteColor = '#2196F3'; // Blue
+                                blackColor = '#FF9800'; // Orange
+                                break;
+                            case 'purple':
+                                whiteColor = '#9C27B0'; // Purple
+                                blackColor = '#FFEB3B'; // Yellow
+                                break;
+                            default: // default
+                                whiteColor = '#4CAF50'; // Green
+                                blackColor = '#F44336'; // Red
+                        }
+                        
+                        myVars.whiteAdvantageColor = whiteColor;
+                        myVars.blackAdvantageColor = blackColor;
+                    }
+                }
+            }
+        } catch (error) {
+            console.log('Error loading settings:', error);
+        }
+    };
+
+    // Create a move history display
+    myFunctions.createMoveHistoryDisplay = function() {
+        // Create container for move history
+        const moveHistoryContainer = document.createElement('div');
+        moveHistoryContainer.id = 'moveHistoryContainer';
+        moveHistoryContainer.style = `
+            margin-top: 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            padding: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+        `;
+        
+        // Create header
+        const header = document.createElement('h3');
+        header.textContent = 'Engine Move History';
+        header.style = `
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-size: 16px;
+            color: #333;
+        `;
+        
+        // Create table for moves
+        const moveTable = document.createElement('table');
+        moveTable.id = 'moveHistoryTable';
+        moveTable.style = `
+            width: 100%;
+            border-collapse: collapse;
+        `;
+        
+        // Create table header
+        const tableHeader = document.createElement('thead');
+        tableHeader.innerHTML = `
+            <tr>
+                <th style="text-align: left; padding: 5px; border-bottom: 1px solid #ddd;">Move</th>
+                <th style="text-align: left; padding: 5px; border-bottom: 1px solid #ddd;">Eval</th>
+                <th style="text-align: left; padding: 5px; border-bottom: 1px solid #ddd;">Depth</th>
+            </tr>
+        `;
+        
+        // Create table body
+        const tableBody = document.createElement('tbody');
+        tableBody.id = 'moveHistoryTableBody';
+        
+        // Assemble the components
+        moveTable.appendChild(tableHeader);
+        moveTable.appendChild(tableBody);
+        moveHistoryContainer.appendChild(header);
+        moveHistoryContainer.appendChild(moveTable);
+        
+        // Add clear history button
+        const clearButton = document.createElement('button');
+        clearButton.textContent = 'Clear History';
+        clearButton.style = `
+            margin-top: 10px;
+            padding: 5px 10px;
+            background-color: #f44336;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        `;
+        clearButton.onclick = function() {
+            document.getElementById('moveHistoryTableBody').innerHTML = '';
+        };
+        
+        moveHistoryContainer.appendChild(clearButton);
+        
+        return moveHistoryContainer;
+    };
+    
+    // Add a move to the history
+    myFunctions.addMoveToHistory = function(move, evaluation, depth) {
+        const tableBody = document.getElementById('moveHistoryTableBody');
+        if (!tableBody) return;
+        
+        const row = document.createElement('tr');
+        
+        // Format the evaluation
+        let evalText = '';
+        if (typeof evaluation === 'string' && evaluation.includes('Mate')) {
+            evalText = evaluation;
+        } else {
+            const sign = evaluation > 0 ? '+' : '';
+            evalText = `${sign}${parseFloat(evaluation).toFixed(2)}`;
+        }
+        
+        row.innerHTML = `
+            <td style="padding: 5px; border-bottom: 1px solid #ddd;">${move}</td>
+            <td style="padding: 5px; border-bottom: 1px solid #ddd;">${evalText}</td>
+            <td style="padding: 5px; border-bottom: 1px solid #ddd;">${depth}</td>
+        `;
+        
+        // Add the new row at the top
+        if (tableBody.firstChild) {
+            tableBody.insertBefore(row, tableBody.firstChild);
+        } else {
+            tableBody.appendChild(row);
+        }
+        
+        // Limit the number of rows to 50
+        while (tableBody.children.length > 50) {
+            tableBody.removeChild(tableBody.lastChild);
+        }
+    };
 }
 
 //Touching below may break the script
