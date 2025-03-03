@@ -314,14 +314,81 @@ function main() {
     }
 
     function parser(e){
+        // Store alternative moves for human-like play
+        if(e.data.includes('info') && e.data.includes('pv') && !e.data.includes('bestmove')) {
+            try {
+                // Extract the move from the principal variation (pv)
+                const parts = e.data.split(' ');
+                const pvIndex = parts.indexOf('pv');
+                if(pvIndex !== -1 && parts[pvIndex + 1]) {
+                    const move = parts[pvIndex + 1];
+                    
+                    // Store this move as an alternative
+                    if(!myVars.alternativeMoves) {
+                        myVars.alternativeMoves = [];
+                    }
+                    
+                    // Only add if not already in the list
+                    if(!myVars.alternativeMoves.includes(move)) {
+                        myVars.alternativeMoves.push(move);
+                    }
+                }
+            } catch (err) {
+                console.log('Error parsing alternative move:', err);
+            }
+        }
+        
         if(e.data.includes('bestmove')){
-            console.log(e.data.split(' ')[1]);
-            myFunctions.color(e.data.split(' ')[1]);
-            isThinking = false;
+            const bestMove = e.data.split(' ')[1];
+            console.log('Best move:', bestMove);
             
-            // Update auto run status if auto run is enabled
-            if (myVars.autoRun) {
-                myFunctions.updateAutoRunStatus('on');
+            // If human mode is active, simulate human play
+            if(myVars.humanMode && myVars.humanMode.active && myVars.alternativeMoves && myVars.alternativeMoves.length > 0) {
+                // Get the alternative moves (excluding the best move)
+                const alternatives = myVars.alternativeMoves.filter(move => move !== bestMove);
+                
+                // Simulate human play with thinking time
+                const moveToPlay = bestMove; // Default to best move
+                
+                // Simulate thinking time
+                const thinkingTime = Math.random() * 
+                    (myVars.humanMode.moveTime.max - myVars.humanMode.moveTime.min) + 
+                    myVars.humanMode.moveTime.min;
+                
+                console.log(`Human mode: Thinking for ${thinkingTime.toFixed(1)} seconds...`);
+                
+                // Delay the move to simulate thinking
+                setTimeout(() => {
+                    // Select move based on human-like error rates
+                    const selectedMove = simulateHumanPlay(bestMove, alternatives);
+                    
+                    // Play the selected move
+                    console.log(`Human mode: Playing ${selectedMove}`);
+                    myFunctions.color(selectedMove);
+                    
+                    // Reset alternative moves for next turn
+                    myVars.alternativeMoves = [];
+                    
+                    // Update auto run status if auto run is enabled
+                    if (myVars.autoRun) {
+                        myFunctions.updateAutoRunStatus('on');
+                    }
+                }, thinkingTime * 1000);
+                
+                // Clear the thinking flag immediately to prevent multiple calls
+                isThinking = false;
+            } else {
+                // Normal engine play (no human simulation)
+                myFunctions.color(bestMove);
+                isThinking = false;
+                
+                // Update auto run status if auto run is enabled
+                if (myVars.autoRun) {
+                    myFunctions.updateAutoRunStatus('on');
+                }
+                
+                // Reset alternative moves for next turn
+                myVars.alternativeMoves = [];
             }
         }
         // Parse evaluation information
@@ -493,6 +560,264 @@ function main() {
         }
         
         console.log(`Engine ELO set to ${elo} with max depth ${maxDepth} and skill level ${skillLevel}`);
+    }
+
+    // Function to set human-like play parameters
+    function setHumanMode(level) {
+        if(!engine.engine) return;
+        
+        // Define human-like play characteristics based on level
+        let elo, moveTime, errorRate, blunderRate;
+        
+        switch(level) {
+            case 'beginner':
+                elo = 800;
+                moveTime = { min: 1, max: 5 }; // Seconds
+                errorRate = 0.3; // 30% chance of suboptimal moves
+                blunderRate = 0.15; // 15% chance of blunders
+                break;
+            case 'casual':
+                elo = 1200;
+                moveTime = { min: 2, max: 8 };
+                errorRate = 0.2;
+                blunderRate = 0.1;
+                break;
+            case 'intermediate':
+                elo = 1600;
+                moveTime = { min: 3, max: 12 };
+                errorRate = 0.15;
+                blunderRate = 0.05;
+                break;
+            case 'advanced':
+                elo = 2000;
+                moveTime = { min: 5, max: 15 };
+                errorRate = 0.1;
+                blunderRate = 0.03;
+                break;
+            case 'expert':
+                elo = 2400;
+                moveTime = { min: 8, max: 20 };
+                errorRate = 0.05;
+                blunderRate = 0.01;
+                break;
+            default:
+                elo = 1600; // Default to intermediate
+                moveTime = { min: 3, max: 12 };
+                errorRate = 0.15;
+                blunderRate = 0.05;
+        }
+        
+        // Store human mode settings
+        myVars.humanMode = {
+            active: true,
+            level: level,
+            elo: elo,
+            moveTime: moveTime,
+            errorRate: errorRate,
+            blunderRate: blunderRate
+        };
+        
+        // Set the engine ELO
+        setEngineElo(elo);
+        
+        // Update UI to reflect human mode
+        if ($('#humanModeLevel')[0]) {
+            $('#humanModeLevel')[0].textContent = level.charAt(0).toUpperCase() + level.slice(1);
+        }
+        
+        // Update the human mode info in the UI
+        const humanModeInfo = document.getElementById('humanModeInfo');
+        if (humanModeInfo) {
+            humanModeInfo.textContent = `Playing like a ${level} human (ELO ~${elo})`;
+        }
+        
+        console.log(`Human mode set to ${level} (ELO: ${elo}, Error rate: ${errorRate}, Blunder rate: ${blunderRate})`);
+    }
+
+    // Function to simulate human-like play
+    function simulateHumanPlay(bestMove, alternativeMoves) {
+        if (!myVars.humanMode || !myVars.humanMode.active) {
+            return bestMove; // Return the best move if human mode is not active
+        }
+        
+        const { errorRate, blunderRate, moveTime } = myVars.humanMode;
+        
+        // Simulate thinking time for human-like behavior
+        const thinkingTime = Math.random() * (moveTime.max - moveTime.min) + moveTime.min;
+        
+        // Function to select a move based on human-like error rates
+        const selectMove = () => {
+            const random = Math.random();
+            
+            // Simulate a blunder (choosing a bad move)
+            if (random < blunderRate && alternativeMoves.length > 2) {
+                // Pick one of the worst moves
+                const worstMoves = alternativeMoves.slice(-2);
+                return worstMoves[Math.floor(Math.random() * worstMoves.length)];
+            }
+            // Simulate an error (choosing a suboptimal but not terrible move)
+            else if (random < errorRate + blunderRate && alternativeMoves.length > 0) {
+                // Pick a random move from the middle of the alternatives list
+                const middleIndex = Math.floor(alternativeMoves.length / 2);
+                const range = Math.max(1, Math.floor(alternativeMoves.length / 4));
+                const startIndex = Math.max(0, middleIndex - range);
+                const endIndex = Math.min(alternativeMoves.length, middleIndex + range);
+                const middleMoves = alternativeMoves.slice(startIndex, endIndex);
+                return middleMoves[Math.floor(Math.random() * middleMoves.length)];
+            }
+            // Otherwise, play the best move
+            else {
+                return bestMove;
+            }
+        };
+        
+        // Store the selected move to be played after the simulated thinking time
+        const selectedMove = selectMove();
+        console.log(`Human mode: Thinking for ${thinkingTime.toFixed(1)} seconds before playing ${selectedMove}`);
+        
+        // Return the selected move
+        return selectedMove;
+    }
+
+    // Function to extract opponent's rating from the page
+    function extractOpponentRating() {
+        try {
+            // Look for user tagline components that contain ratings
+            const userTaglines = document.querySelectorAll('.user-tagline-component');
+            
+            if (userTaglines.length === 0) {
+                console.log('No user taglines found');
+                return null;
+            }
+            
+            // Find the opponent's tagline (not the current user)
+            let opponentRating = null;
+            
+            for (const tagline of userTaglines) {
+                // Extract the rating from the tagline
+                const ratingSpan = tagline.querySelector('.user-tagline-rating');
+                if (ratingSpan) {
+                    const ratingText = ratingSpan.textContent.trim();
+                    // Extract the number from format like "(2228)"
+                    const ratingMatch = ratingText.match(/\((\d+)\)/);
+                    
+                    if (ratingMatch && ratingMatch[1]) {
+                        opponentRating = parseInt(ratingMatch[1]);
+                        console.log(`Found opponent rating: ${opponentRating}`);
+                        
+                        // Update the opponent rating info in the UI
+                        const opponentRatingInfo = document.getElementById('opponentRatingInfo');
+                        if (opponentRatingInfo) {
+                            opponentRatingInfo.textContent = `When enabled, the engine will play at the same rating as your opponent (${opponentRating})`;
+                        }
+                        
+                        break;
+                    }
+                }
+            }
+            
+            return opponentRating;
+        } catch (error) {
+            console.error('Error extracting opponent rating:', error);
+            return null;
+        }
+    }
+    
+    // Function to update fusion mode status
+    myFunctions.updateFusionMode = function(enabled) {
+        const fusionModeStatus = document.getElementById('fusionModeStatus');
+        if (fusionModeStatus) {
+            fusionModeStatus.textContent = enabled ? 'On' : 'Off';
+            fusionModeStatus.style.color = enabled ? '#4CAF50' : '#666';
+        }
+        
+        // Store previous ELO when enabling fusion mode
+        if (enabled && !myVars.fusionMode) {
+            myVars.previousEloRating = myVars.eloRating;
+        }
+        
+        myVars.fusionMode = enabled;
+        
+        if (enabled) {
+            // Extract opponent rating and set engine ELO
+            const opponentRating = extractOpponentRating();
+            if (opponentRating) {
+                // Update the ELO slider to match opponent rating
+                if ($('#eloSlider')[0]) {
+                    // Clamp the rating to the slider's min/max values
+                    const clampedRating = Math.max(1000, Math.min(3000, opponentRating));
+                    $('#eloSlider')[0].value = clampedRating;
+                    $('#eloValue')[0].textContent = clampedRating;
+                    myVars.eloRating = clampedRating;
+                    
+                    // Set the engine ELO
+                    setEngineElo(clampedRating);
+                }
+            } else {
+                console.log('Could not extract opponent rating, fusion mode will not work correctly');
+            }
+        } else {
+            // Restore previous ELO setting when disabling fusion mode
+            if (myVars.previousEloRating) {
+                if ($('#eloSlider')[0]) {
+                    $('#eloSlider')[0].value = myVars.previousEloRating;
+                    $('#eloValue')[0].textContent = myVars.previousEloRating;
+                    myVars.eloRating = myVars.previousEloRating;
+                    
+                    // Set the engine ELO back to previous value
+                    setEngineElo(myVars.previousEloRating);
+                }
+            }
+            
+            // Reset the opponent rating info text
+            const opponentRatingInfo = document.getElementById('opponentRatingInfo');
+            if (opponentRatingInfo) {
+                opponentRatingInfo.textContent = 'When enabled, the engine will play at the same rating as your opponent';
+            }
+        }
+    }
+
+    // Function to update human mode status
+    myFunctions.updateHumanMode = function(enabled) {
+        const humanModeStatus = document.getElementById('humanModeStatus');
+        if (humanModeStatus) {
+            humanModeStatus.textContent = enabled ? 'On' : 'Off';
+            humanModeStatus.style.color = enabled ? '#4CAF50' : '#666';
+        }
+        
+        // Store previous ELO when enabling human mode
+        if (enabled && !myVars.humanMode?.active) {
+            myVars.previousEloRating = myVars.eloRating;
+        }
+        
+        if (enabled) {
+            // Apply the selected human mode level
+            const level = $('#humanModeSelect').val() || 'intermediate';
+            setHumanMode(level);
+        } else {
+            // Disable human mode
+            if (myVars.humanMode) {
+                myVars.humanMode.active = false;
+            }
+            
+            // Restore previous ELO setting when disabling human mode
+            if (myVars.previousEloRating) {
+                if ($('#eloSlider')[0]) {
+                    $('#eloSlider')[0].value = myVars.previousEloRating;
+                    $('#eloValue')[0].textContent = myVars.previousEloRating;
+                    myVars.eloRating = myVars.previousEloRating;
+                    
+                    // Set the engine ELO back to previous value
+                    setEngineElo(myVars.previousEloRating);
+                }
+            }
+            
+            // Reset the human mode info text
+            const humanModeInfo = document.getElementById('humanModeInfo');
+            if (humanModeInfo) {
+                humanModeInfo.textContent = 'When enabled, the engine will play like a human with realistic mistakes and timing';
+            }
+        }
     }
 
     // Function to update engine ELO from UI
@@ -794,6 +1119,45 @@ function main() {
                        oninput="document.myFunctions.updateEngineElo()" style="width: 80%;">
                 <div id="eloDepthInfo" style="font-size: 12px; color: #666; margin-top: 5px;">
                     Note: Lower ELO settings will limit the maximum search depth
+                </div>
+            </div>
+            
+            <div style="margin-bottom: 15px;">
+                <div style="display: flex; align-items: center; margin: 10px 0;">
+                    <label for="fusionModeToggle" style="margin-right: 10px;">Fusion Mode (Match Opponent Rating):</label>
+                    <label class="switch">
+                        <input type="checkbox" id="fusionMode" name="fusionMode" value="false">
+                        <span class="slider round"></span>
+                    </label>
+                    <span id="fusionModeStatus" style="margin-left: 10px; font-size: 12px; color: #666;">Off</span>
+                </div>
+                <div id="opponentRatingInfo" style="font-size: 12px; color: #666; margin-top: 5px;">
+                    When enabled, the engine will play at the same rating as your opponent
+                </div>
+            </div>
+            
+            <div style="margin-bottom: 15px;">
+                <div style="display: flex; align-items: center; margin: 10px 0;">
+                    <label for="humanModeToggle" style="margin-right: 10px;">Human Mode:</label>
+                    <label class="switch">
+                        <input type="checkbox" id="humanMode" name="humanMode" value="false">
+                        <span class="slider round"></span>
+                    </label>
+                    <span id="humanModeStatus" style="margin-left: 10px; font-size: 12px; color: #666;">Off</span>
+                </div>
+                <div style="margin-top: 10px;">
+                    <label for="humanModeSelect">Human Skill Level: <span id="humanModeLevel">Intermediate</span></label>
+                    <button id="humanModeInfoBtn" style="margin-left: 5px; padding: 0 5px; background-color: #2196F3; color: white; border: none; border-radius: 50%; cursor: pointer; font-size: 12px;">?</button><br>
+                    <select id="humanModeSelect" style="width: 80%; padding: 5px; margin-top: 5px;">
+                        <option value="beginner">Beginner (ELO ~800)</option>
+                        <option value="casual">Casual (ELO ~1200)</option>
+                        <option value="intermediate" selected>Intermediate (ELO ~1600)</option>
+                        <option value="advanced">Advanced (ELO ~2000)</option>
+                        <option value="expert">Expert (ELO ~2400)</option>
+                    </select>
+                </div>
+                <div id="humanModeInfo" style="font-size: 12px; color: #666; margin-top: 5px;">
+                    When enabled, the engine will play like a human with realistic mistakes and timing
                 </div>
             </div>
             
@@ -1154,8 +1518,25 @@ function main() {
             myVars.whiteAdvantageColor = '#4CAF50';
             myVars.blackAdvantageColor = '#F44336';
             
+            // Initialize fusion mode
+            myVars.fusionMode = false;
+            
             // Load saved settings
             myFunctions.loadSettings();
+            
+            // Update fusion mode status based on saved settings
+            if (myVars.fusionMode) {
+                myFunctions.updateFusionMode(true);
+                $('#fusionMode').prop('checked', true);
+                $('#eloSlider').prop('disabled', true);
+            }
+            
+            // Periodically check for opponent rating changes when fusion mode is enabled
+            setInterval(function() {
+                if (myVars.fusionMode) {
+                    extractOpponentRating();
+                }
+            }, 10000); // Check every 10 seconds
             
             // Create ELO info modal
             var eloInfoModal = document.createElement('div');
@@ -1233,6 +1614,106 @@ function main() {
                 document.getElementById('eloInfoModal').style.display = 'flex';
             });
 
+            // Create Human Mode info modal
+            var humanModeInfoModal = document.createElement('div');
+            humanModeInfoModal.id = 'humanModeInfoModal';
+            humanModeInfoModal.style = `
+                display: none;
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background-color: rgba(0,0,0,0.7);
+                z-index: 2000;
+                justify-content: center;
+                align-items: center;
+            `;
+            
+            var humanModeModalContent = document.createElement('div');
+            humanModeModalContent.style = `
+                background-color: white;
+                padding: 20px;
+                border-radius: 8px;
+                max-width: 500px;
+                max-height: 80vh;
+                overflow-y: auto;
+                position: relative;
+            `;
+            
+            var humanModeCloseBtn = document.createElement('span');
+            humanModeCloseBtn.innerHTML = '&times;';
+            humanModeCloseBtn.style = `
+                position: absolute;
+                top: 10px;
+                right: 15px;
+                font-size: 24px;
+                cursor: pointer;
+                color: #333;
+            `;
+            humanModeCloseBtn.onclick = function() {
+                humanModeInfoModal.style.display = 'none';
+            };
+            
+            humanModeModalContent.appendChild(humanModeCloseBtn);
+            
+            var humanModeInfoTitle = document.createElement('h2');
+            humanModeInfoTitle.textContent = 'Human Mode: Realistic Chess Play';
+            humanModeInfoTitle.style = 'margin-top: 0; color: #2196F3;';
+            humanModeModalContent.appendChild(humanModeInfoTitle);
+            
+            var humanModeInfoText = document.createElement('div');
+            humanModeInfoText.innerHTML = `
+                <p>Human Mode makes the chess engine play more like a real human player by introducing:</p>
+                
+                <ul>
+                    <li><strong>Realistic thinking time</strong> - varies based on skill level</li>
+                    <li><strong>Occasional mistakes</strong> - humans don't always find the best move</li>
+                    <li><strong>Rare blunders</strong> - even good players make serious mistakes sometimes</li>
+                </ul>
+                
+                <p>Choose from five different skill levels:</p>
+                
+                <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+                    <tr style="background-color: #f2f2f2;">
+                        <th style="padding: 8px; text-align: left; border: 1px solid #ddd;">Skill Level</th>
+                        <th style="padding: 8px; text-align: left; border: 1px solid #ddd;">ELO Range</th>
+                        <th style="padding: 8px; text-align: left; border: 1px solid #ddd;">Characteristics</th>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; border: 1px solid #ddd;"><strong>Beginner</strong></td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">~800</td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">Quick moves, frequent mistakes, occasional blunders</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; border: 1px solid #ddd;"><strong>Casual</strong></td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">~1200</td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">Moderate thinking time, common mistakes</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; border: 1px solid #ddd;"><strong>Intermediate</strong></td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">~1600</td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">Longer thinking on complex positions, occasional mistakes</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; border: 1px solid #ddd;"><strong>Advanced</strong></td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">~2000</td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">Careful consideration, infrequent mistakes</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; border: 1px solid #ddd;"><strong>Expert</strong></td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">~2400</td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">Deep analysis, rare mistakes, very rare blunders</td>
+                    </tr>
+                </table>
+                
+                <p style="margin-top: 15px;"><strong>Note:</strong> Human Mode and Fusion Mode cannot be active at the same time.</p>
+            `;
+            humanModeModalContent.appendChild(humanModeInfoText);
+            
+            humanModeInfoModal.appendChild(humanModeModalContent);
+            document.body.appendChild(humanModeInfoModal);
+
             // Add CSS for toggle switch
             var toggleStyle = document.createElement('style');
             toggleStyle.innerHTML = `
@@ -1299,20 +1780,76 @@ function main() {
             
             // Update auto run status when checkbox changes
             $('#autoRun').on('change', function() {
-                const isChecked = $(this).is(':checked');
+                const isChecked = this.checked;
+                myVars.autoRun = isChecked;
                 myFunctions.updateAutoRunStatus(isChecked ? 'on' : 'off');
+            });
+
+            $('#fusionMode').on('change', function() {
+                const isChecked = this.checked;
+                myFunctions.updateFusionMode(isChecked);
                 
-                // If turning on auto run and it's the player's turn, trigger it immediately
-                if (isChecked && myTurn && canGo && !isThinking) {
-                    canGo = false;
-                    var currentDelay = myVars.delay != undefined ? myVars.delay * 1000 : 10;
-                    other(currentDelay);
+                // Disable the ELO slider when fusion mode is enabled
+                $('#eloSlider').prop('disabled', isChecked);
+                
+                // Extract opponent rating immediately when enabled
+                if (isChecked) {
+                    extractOpponentRating();
+                }
+                
+                // Disable human mode when fusion mode is enabled
+                if (isChecked && $('#humanMode').prop('checked')) {
+                    $('#humanMode').prop('checked', false);
+                    myFunctions.updateHumanMode(false);
                 }
             });
 
-            // Add event listener for the persistent highlights checkbox
+            // Human mode toggle event listener
+            $('#humanMode').on('change', function() {
+                const isChecked = this.checked;
+                myFunctions.updateHumanMode(isChecked);
+                
+                // Disable the ELO slider when human mode is enabled
+                $('#eloSlider').prop('disabled', isChecked);
+                
+                // Disable fusion mode when human mode is enabled
+                if (isChecked && $('#fusionMode').prop('checked')) {
+                    $('#fusionMode').prop('checked', false);
+                    myFunctions.updateFusionMode(false);
+                }
+                
+                // Apply the selected human mode level
+                if (isChecked) {
+                    const level = $('#humanModeSelect').val();
+                    setHumanMode(level);
+                }
+            });
+            
+            // Human mode level select event listener
+            $('#humanModeSelect').on('change', function() {
+                const level = $(this).val();
+                
+                // Only apply if human mode is active
+                if ($('#humanMode').prop('checked')) {
+                    setHumanMode(level);
+                }
+            });
+            
+            // Human mode info button event listener
+            $('#humanModeInfoBtn').on('click', function() {
+                document.getElementById('humanModeInfoModal').style.display = 'flex';
+            });
+            
+            $('#autoMove').on('change', function() {
+                myVars.autoMove = this.checked;
+            });
+
+            $('#showArrows').on('change', function() {
+                myVars.showArrows = this.checked;
+            });
+
             $('#persistentHighlights').on('change', function() {
-                myVars.persistentHighlights = $(this).is(':checked');
+                myVars.persistentHighlights = this.checked;
                 
                 // If turning off persistent highlights, clear any existing ones
                 if (!myVars.persistentHighlights) {
@@ -1441,7 +1978,12 @@ function main() {
             timeDelayMax: parseFloat($('#timeDelayMax')[0].value),
             evalBarTheme: $('#evalBarColor').val(),
             whiteAdvantageColor: $('#whiteAdvantageColor').val(),
-            blackAdvantageColor: $('#blackAdvantageColor').val()
+            blackAdvantageColor: $('#blackAdvantageColor').val(),
+            fusionMode: myVars.fusionMode,
+            humanMode: myVars.humanMode ? {
+                active: myVars.humanMode.active,
+                level: myVars.humanMode.level
+            } : { active: false, level: 'intermediate' }
         };
         
         GM_setValue('chessAISettings', JSON.stringify(settings));
@@ -1583,6 +2125,28 @@ function main() {
                         
                         myVars.whiteAdvantageColor = whiteColor;
                         myVars.blackAdvantageColor = blackColor;
+                    }
+                }
+                
+                if (settings.fusionMode !== undefined) {
+                    $('#fusionMode').prop('checked', settings.fusionMode);
+                    myVars.fusionMode = settings.fusionMode;
+                }
+                
+                // Apply Human mode settings
+                if (settings.humanMode) {
+                    // Set human mode active state
+                    $('#humanMode').prop('checked', settings.humanMode.active);
+                    
+                    // Set human mode level
+                    if (settings.humanMode.level) {
+                        $('#humanModeSelect').val(settings.humanMode.level);
+                    }
+                    
+                    // Apply human mode if active
+                    if (settings.humanMode.active) {
+                        myFunctions.updateHumanMode(true);
+                        $('#eloSlider').prop('disabled', true);
                     }
                 }
             }
