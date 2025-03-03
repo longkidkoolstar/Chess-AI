@@ -32,6 +32,7 @@ function main() {
     myVars.delay = 0.1;
     myVars.eloRating = 1500; // Default ELO rating
     myVars.currentEvaluation = 0; // Current evaluation value
+    myVars.persistentHighlights = true; // Default to persistent highlights
     var myFunctions = document.myFunctions = {};
 
     // Create evaluation bar
@@ -224,8 +225,16 @@ function main() {
         const moveNotation = res1 + '-' + res2;
         myFunctions.addMoveToHistory(moveNotation, myVars.currentEvaluation, lastValue);
 
+        // Clear any existing highlights before adding new ones
+        myFunctions.clearHighlights();
+
         if(myVars.autoMove == true){
             myFunctions.movePiece(res1, res2);
+            
+            // After auto move, we need to reset canGo to allow auto run on next turn
+            setTimeout(() => {
+                canGo = true;
+            }, 500);
         }
         isThinking = false;
 
@@ -247,26 +256,48 @@ function main() {
                 .replace(/^f/, "6")
                 .replace(/^g/, "7")
                 .replace(/^h/, "8");
-            $(board.nodeName)
-                .prepend('<div class="highlight square-' + res2 + ' bro" style="background-color: rgb(235, 97, 80); opacity: 0.71;" data-test-element="highlight"></div>')
-                .children(':first')
-                .delay(1800)
-                .queue(function() {
-                $(this)
-                    .remove();
-            });
-            $(board.nodeName)
-                .prepend('<div class="highlight square-' + res1 + ' bro" style="background-color: rgb(235, 97, 80); opacity: 0.71;" data-test-element="highlight"></div>')
-                .children(':first')
-                .delay(1800)
-                .queue(function() {
-                $(this)
-                    .remove();
-            });
+            
+            if (myVars.persistentHighlights) {
+                // Add highlights with custom class for easier removal later
+                $(board.nodeName)
+                    .prepend('<div class="highlight square-' + res2 + ' bro persistent-highlight" style="background-color: rgb(235, 97, 80); opacity: 0.71;" data-test-element="highlight"></div>');
+                
+                $(board.nodeName)
+                    .prepend('<div class="highlight square-' + res1 + ' bro persistent-highlight" style="background-color: rgb(235, 97, 80); opacity: 0.71;" data-test-element="highlight"></div>');
+            } else {
+                // Use the original temporary highlights
+                $(board.nodeName)
+                    .prepend('<div class="highlight square-' + res2 + ' bro" style="background-color: rgb(235, 97, 80); opacity: 0.71;" data-test-element="highlight"></div>')
+                    .children(':first')
+                    .delay(1800)
+                    .queue(function() {
+                    $(this)
+                        .remove();
+                });
+                
+                $(board.nodeName)
+                    .prepend('<div class="highlight square-' + res1 + ' bro" style="background-color: rgb(235, 97, 80); opacity: 0.71;" data-test-element="highlight"></div>')
+                    .children(':first')
+                    .delay(1800)
+                    .queue(function() {
+                    $(this)
+                        .remove();
+                });
+            }
         }
     }
 
+    // Add a function to clear highlights
+    myFunctions.clearHighlights = function() {
+        // Remove all persistent highlights
+        $('.persistent-highlight').remove();
+    }
+
+    // Modify the movePiece function to clear highlights when a move is made
     myFunctions.movePiece = function(from, to){
+        // Clear any existing highlights when a move is made
+        myFunctions.clearHighlights();
+        
         for (var each=0;each<board.game.getLegalMoves().length;each++){
             if(board.game.getLegalMoves()[each].from == from){
                 if(board.game.getLegalMoves()[each].to == to){
@@ -287,6 +318,11 @@ function main() {
             console.log(e.data.split(' ')[1]);
             myFunctions.color(e.data.split(' ')[1]);
             isThinking = false;
+            
+            // Update auto run status if auto run is enabled
+            if (myVars.autoRun) {
+                myFunctions.updateAutoRunStatus('on');
+            }
         }
         // Parse evaluation information
         if(e.data.includes('info') && e.data.includes('score cp')) {
@@ -524,8 +560,16 @@ function main() {
     }
 
     myFunctions.autoRun = function(lstValue){
-        if(board.game.getTurn() == board.game.getPlayingAs()){
+        // Only run if it's the player's turn and not already thinking
+        if(board.game.getTurn() == board.game.getPlayingAs() && !isThinking){
+            console.log(`Auto running engine at depth ${lstValue}`);
+            myFunctions.updateAutoRunStatus('running');
             myFunctions.runChessEngine(lstValue);
+        } else {
+            console.log("Auto run skipped - not player's turn or engine is already thinking");
+            if (myVars.autoRun) {
+                myFunctions.updateAutoRunStatus('waiting');
+            }
         }
     }
 
@@ -773,8 +817,19 @@ function main() {
             <div style="margin-bottom: 15px;">
                 <input type="checkbox" id="showArrows" name="showArrows" value="true" checked>
                 <label for="showArrows"> Show move arrows</label><br>
-                <input type="checkbox" id="autoRun" name="autoRun" value="false">
-                <label for="autoRun"> Enable auto run</label><br>
+                
+                <input type="checkbox" id="persistentHighlights" name="persistentHighlights" value="true" checked>
+                <label for="persistentHighlights"> Keep highlights until next move</label><br>
+                
+                <div style="display: flex; align-items: center; margin: 10px 0;">
+                    <label for="autoRunToggle" style="margin-right: 10px;">Auto Run:</label>
+                    <label class="switch">
+                        <input type="checkbox" id="autoRun" name="autoRun" value="false">
+                        <span class="slider round"></span>
+                    </label>
+                    <span id="autoRunStatus" style="margin-left: 10px; font-size: 12px; color: #666;">Off</span>
+                </div>
+                
                 <input type="checkbox" id="autoMove" name="autoMove" value="false">
                 <label for="autoMove"> Enable auto move</label><br>
             </div>
@@ -1177,21 +1232,111 @@ function main() {
             $('#eloInfoBtn').on('click', function() {
                 document.getElementById('eloInfoModal').style.display = 'flex';
             });
+
+            // Add CSS for toggle switch
+            var toggleStyle = document.createElement('style');
+            toggleStyle.innerHTML = `
+                /* The switch - the box around the slider */
+                .switch {
+                    position: relative;
+                    display: inline-block;
+                    width: 50px;
+                    height: 24px;
+                }
+                
+                /* Hide default HTML checkbox */
+                .switch input {
+                    opacity: 0;
+                    width: 0;
+                    height: 0;
+                }
+                
+                /* The slider */
+                .slider {
+                    position: absolute;
+                    cursor: pointer;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background-color: #ccc;
+                    transition: .4s;
+                }
+                
+                .slider:before {
+                    position: absolute;
+                    content: "";
+                    height: 16px;
+                    width: 16px;
+                    left: 4px;
+                    bottom: 4px;
+                    background-color: white;
+                    transition: .4s;
+                }
+                
+                input:checked + .slider {
+                    background-color: #4CAF50;
+                }
+                
+                input:focus + .slider {
+                    box-shadow: 0 0 1px #4CAF50;
+                }
+                
+                input:checked + .slider:before {
+                    transform: translateX(26px);
+                }
+                
+                /* Rounded sliders */
+                .slider.round {
+                    border-radius: 24px;
+                }
+                
+                .slider.round:before {
+                    border-radius: 50%;
+                }
+            `;
+            document.head.appendChild(toggleStyle);
             
+            // Update auto run status when checkbox changes
+            $('#autoRun').on('change', function() {
+                const isChecked = $(this).is(':checked');
+                myFunctions.updateAutoRunStatus(isChecked ? 'on' : 'off');
+                
+                // If turning on auto run and it's the player's turn, trigger it immediately
+                if (isChecked && myTurn && canGo && !isThinking) {
+                    canGo = false;
+                    var currentDelay = myVars.delay != undefined ? myVars.delay * 1000 : 10;
+                    other(currentDelay);
+                }
+            });
+
+            // Add event listener for the persistent highlights checkbox
+            $('#persistentHighlights').on('change', function() {
+                myVars.persistentHighlights = $(this).is(':checked');
+                
+                // If turning off persistent highlights, clear any existing ones
+                if (!myVars.persistentHighlights) {
+                    myFunctions.clearHighlights();
+                }
+            });
+
             loaded = true;
         } catch (error) {console.log(error)}
     }
 
 
     function other(delay){
-        var endTime = Date.now() + delay;
-        var timer = setInterval(()=>{
-            if(Date.now() >= endTime){
+        console.log(`Scheduling next auto run in ${delay/1000} seconds`);
+        myFunctions.updateAutoRunStatus('waiting');
+        
+        // Use setTimeout instead of setInterval with constant checking
+        setTimeout(() => {
+            // Only proceed if auto run is still enabled
+            if(myVars.autoRun && myTurn && !isThinking) {
                 myFunctions.autoRun(lastValue);
-                canGo = true;
-                clearInterval(timer);
             }
-        },10);
+                canGo = true;
+        }, delay);
     }
 
 
@@ -1213,15 +1358,34 @@ function main() {
     const waitForChessBoard = setInterval(() => {
         if(loaded) {
             board = $('chess-board')[0] || $('wc-chess-board')[0];
-            myVars.autoRun = $('#autoRun')[0].checked;
-            myVars.autoMove = $('#autoMove')[0].checked;
-            myVars.showArrows = $('#showArrows')[0].checked;
-            let minDel = parseFloat($('#timeDelayMin')[0].value);
-            let maxDel = parseFloat($('#timeDelayMax')[0].value);
+            
+            // Only update these values when needed, not every 100ms
+            if($('#autoRun')[0]) myVars.autoRun = $('#autoRun')[0].checked;
+            if($('#autoMove')[0]) myVars.autoMove = $('#autoMove')[0].checked;
+            if($('#showArrows')[0]) myVars.showArrows = $('#showArrows')[0].checked;
+            
+            // Check if turn has changed
+            const currentTurn = board.game.getTurn() == board.game.getPlayingAs();
+            const turnChanged = currentTurn !== myTurn;
+            myTurn = currentTurn;
+            
+            // Only update delay values when needed
+            if($('#timeDelayMin')[0] && $('#timeDelayMax')[0]) {
+                let minDel = parseFloat($('#timeDelayMin')[0].value);
+                let maxDel = parseFloat($('#timeDelayMax')[0].value);
             myVars.delay = Math.random() * (maxDel - minDel) + minDel;
+            }
+            
             myVars.isThinking = isThinking;
             myFunctions.spinner();
-            if(board.game.getTurn() == board.game.getPlayingAs()){myTurn = true;} else {myTurn = false;}
+            
+            // If turn has changed to player's turn and auto run is enabled, trigger auto run
+            if(turnChanged && myTurn && myVars.autoRun && canGo && !isThinking) {
+                console.log("Turn changed to player's turn, triggering auto run");
+                canGo = false;
+                var currentDelay = myVars.delay != undefined ? myVars.delay * 1000 : 10;
+                other(currentDelay);
+            }
             
             // Update evaluation bar position if board size changes
             if(evalBar && evalText && board) {
@@ -1238,11 +1402,29 @@ function main() {
         if(!engine.engine){
             myFunctions.loadChessEngine();
         }
-        if(myVars.autoRun == true && canGo == true && isThinking == false && myTurn){
-            //console.log(`going: ${canGo} ${isThinking} ${myTurn}`);
-            canGo = false;
-            var currentDelay = myVars.delay != undefined ? myVars.delay * 1000 : 10;
-            other(currentDelay);
+
+        // Check if the board exists and we haven't set up the move listener yet
+        if (board && !board._highlightListenerAdded) {
+            // Try to add a listener for moves
+            try {
+                // Store the current position FEN to detect changes
+                myVars.lastPositionFEN = board.game.getFEN();
+                
+                // Mark that we've added the listener
+                board._highlightListenerAdded = true;
+            } catch (err) {
+                console.log('Error setting up move listener:', err);
+            }
+        }
+        
+        // Check if the position has changed (a move was made)
+        if (board && myVars.lastPositionFEN) {
+            const currentFEN = board.game.getFEN();
+            if (currentFEN !== myVars.lastPositionFEN) {
+                // Position changed, clear highlights
+                myFunctions.clearHighlights();
+                myVars.lastPositionFEN = currentFEN;
+            }
         }
     }, 100);
 
@@ -1252,6 +1434,7 @@ function main() {
             eloRating: myVars.eloRating,
             depth: parseInt($('#depthSlider')[0].value),
             showArrows: $('#showArrows')[0].checked,
+            persistentHighlights: $('#persistentHighlights')[0].checked,
             autoRun: $('#autoRun')[0].checked,
             autoMove: $('#autoMove')[0].checked,
             timeDelayMin: parseFloat($('#timeDelayMin')[0].value),
@@ -1337,9 +1520,20 @@ function main() {
                     myVars.showArrows = settings.showArrows;
                 }
                 
+                if (settings.persistentHighlights !== undefined) {
+                    $('#persistentHighlights')[0].checked = settings.persistentHighlights;
+                    myVars.persistentHighlights = settings.persistentHighlights;
+                }
+                
                 if (settings.autoRun !== undefined) {
                     $('#autoRun')[0].checked = settings.autoRun;
                     myVars.autoRun = settings.autoRun;
+                    
+                    // Update auto run status indicator
+                    if ($('#autoRunStatus')[0]) {
+                        $('#autoRunStatus').text(settings.autoRun ? 'On' : 'Off');
+                        $('#autoRunStatus').css('color', settings.autoRun ? '#4CAF50' : '#666');
+                    }
                 }
                 
                 if (settings.autoMove !== undefined) {
@@ -1502,6 +1696,30 @@ function main() {
         // Limit the number of rows to 50
         while (tableBody.children.length > 50) {
             tableBody.removeChild(tableBody.lastChild);
+        }
+    };
+
+    // Function to update the auto run status indicator
+    myFunctions.updateAutoRunStatus = function(status) {
+        if (!$('#autoRunStatus')[0]) return;
+        
+        switch(status) {
+            case 'on':
+                $('#autoRunStatus').text('On');
+                $('#autoRunStatus').css('color', '#4CAF50');
+                break;
+            case 'off':
+                $('#autoRunStatus').text('Off');
+                $('#autoRunStatus').css('color', '#666');
+                break;
+            case 'waiting':
+                $('#autoRunStatus').text('Waiting...');
+                $('#autoRunStatus').css('color', '#FFA500');
+                break;
+            case 'running':
+                $('#autoRunStatus').text('Running...');
+                $('#autoRunStatus').css('color', '#2196F3');
+                break;
         }
     };
 }
