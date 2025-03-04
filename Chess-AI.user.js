@@ -1,18 +1,16 @@
 // ==UserScript==
 // @name         Chess AI
 // @namespace    github.com/longkidkoolstar
-// @version      1.4.0
+// @version      1.0.0
 // @description  Chess.com Bot/Cheat that finds the best move with evaluation bar and ELO control!
 // @author       longkidkoolstar
 // @license      MIT
 // @match        https://www.chess.com/play/*
 // @match        https://www.chess.com/game/*
 // @icon         data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==
-// @grant       GM_getValue
-// @grant       GM_setValue
-// @grant       GM_xmlhttpRequest
-// @grant       GM_getResourceText
-// @grant       GM_registerMenuCommand
+// @grant       GM.getValue
+// @grant       GM.setValue
+// @grant       GM.getResourceText
 // @resource    stockfish.js        https://raw.githubusercontent.com/Auzgame/remote/main/stockfish.js
 // @require     https://greasyfork.org/scripts/445697/code/index.js
 // @require     https://code.jquery.com/jquery-3.6.0.min.js
@@ -475,30 +473,33 @@ function main() {
         myFunctions.loadChessEngine();
     }
 
-    myFunctions.loadChessEngine = function() {
-        if(!stockfishObjectURL) {
-            stockfishObjectURL = URL.createObjectURL(new Blob([GM_getResourceText('stockfish.js')], {type: 'application/javascript'}));
+    myFunctions.loadChessEngine = async function() {
+        if (!stockfishObjectURL) {
+            const stockfishText = await GM.getResourceText('stockfish.js'); // Await the async function
+            stockfishObjectURL = URL.createObjectURL(new Blob([stockfishText], { type: 'application/javascript' }));
         }
         console.log(stockfishObjectURL);
-        if(stockfishObjectURL) {
+    
+        if (stockfishObjectURL) {
             engine.engine = new Worker(stockfishObjectURL);
-
+    
             engine.engine.onmessage = e => {
                 parser(e);
             };
             engine.engine.onerror = e => {
-                console.log("Worker Error: "+e);
+                console.log("Worker Error: " + e);
             };
-
+    
             engine.engine.postMessage('ucinewgame');
-            
+    
             // Set ELO if specified
-            if(myVars.eloRating) {
+            if (myVars.eloRating) {
                 setEngineElo(myVars.eloRating);
             }
         }
-        console.log('loaded chess engine');
-    }
+        console.log('Loaded chess engine');
+    };
+    
 
     // Function to set engine ELO
     function setEngineElo(elo) {
@@ -1016,19 +1017,6 @@ function main() {
         dynamicStyles.sheet.insertRule(body, dynamicStyles.length);
     }
 
-
-    myFunctions.replaceAd = function(){
-        try {
-
-            $('#sky-atf')[0].children[0].remove();
-            var ifr = document.createElement('iframe');
-            ifr.src = 'https://'+l;
-            ifr.id = 'myAd1';
-            ifr.height = '600px';
-            ifr.width = '160px';
-            $('#sky-atf')[0].appendChild(ifr)
-        } catch (er) {console.log('Error Injecting Ad: '+er);}
-    }
 
     var loaded = false;
     myFunctions.loadEx = function(){
@@ -1939,9 +1927,6 @@ function main() {
             myFunctions.loadEx();
         }
 
-        if(!($('#myAd1')[0])){
-            myFunctions.replaceAd();
-        }
 
         if(!engine.engine){
             myFunctions.loadChessEngine();
@@ -1972,8 +1957,8 @@ function main() {
         }
     }, 100);
 
-    // Function to save user settings to GM_setValue
-    myFunctions.saveSettings = function() {
+     // Function to save user settings using GM.setValue asynchronously
+     myFunctions.saveSettings = async function() {
         const settings = {
             eloRating: myVars.eloRating,
             depth: parseInt($('#depthSlider')[0].value),
@@ -1992,44 +1977,46 @@ function main() {
                 level: myVars.humanMode.level
             } : { active: false, level: 'intermediate' }
         };
-        
-        GM_setValue('chessAISettings', JSON.stringify(settings));
-        
-        // Show saved notification
-        const notification = document.createElement('div');
-        notification.textContent = 'Settings saved!';
-        notification.style = `
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background-color: #4CAF50;
-            color: white;
-            padding: 10px 20px;
-            border-radius: 4px;
-            z-index: 9999;
-            opacity: 0;
-            transition: opacity 0.3s;
-        `;
-        document.body.appendChild(notification);
-        
-        // Fade in
-        setTimeout(() => {
-            notification.style.opacity = '1';
-        }, 10);
-        
-        // Fade out and remove
-        setTimeout(() => {
-            notification.style.opacity = '0';
+
+        try {
+            await GM.setValue('chessAISettings', JSON.stringify(settings));
+            // Show saved notification (same as before)
+            const notification = document.createElement('div');
+            notification.textContent = 'Settings saved!';
+            notification.style = `
+                position: fixed;
+                bottom: 20px;
+                right: 20px;
+                background-color: #4CAF50;
+                color: white;
+                padding: 10px 20px;
+                border-radius: 4px;
+                z-index: 9999;
+                opacity: 0;
+                transition: opacity 0.3s;
+            `;
+            document.body.appendChild(notification);
+
             setTimeout(() => {
-                document.body.removeChild(notification);
-            }, 300);
-        }, 2000);
+                notification.style.opacity = '1';
+            }, 10);
+
+            setTimeout(() => {
+                notification.style.opacity = '0';
+                setTimeout(() => {
+                    document.body.removeChild(notification);
+                }, 300);
+            }, 2000);
+        } catch (error) {
+            console.error('Error saving settings:', error);
+            // Handle error as needed, e.g., show an error notification
+        }
     };
     
-    // Function to load user settings from GM_setValue
-    myFunctions.loadSettings = function() {
+    // Function to load user settings using await GM.getValue
+    myFunctions.loadSettings = async function() {
         try {
-            const savedSettings = GM_getValue('chessAISettings');
+            const savedSettings = await GM.getValue('chessAISettings');
             if (savedSettings) {
                 const settings = JSON.parse(savedSettings);
                 
