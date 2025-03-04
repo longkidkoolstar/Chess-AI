@@ -634,49 +634,54 @@ function main() {
         console.log(`Human mode set to ${level} (ELO: ${elo}, Error rate: ${errorRate}, Blunder rate: ${blunderRate})`);
     }
 
+    // Function to calculate thinking time based on board position
+    function calculateThinkingTime(boardState) {
+        // Example logic: You can customize this based on your evaluation of the board
+        const complexity = evaluateBoardComplexity(boardState); // Implement this function based on your needs
+        const minTime = 100; // Minimum thinking time in milliseconds
+        const maxTime = 2000; // Maximum thinking time in milliseconds
+
+        // Scale thinking time based on complexity (this is just an example)
+        return Math.min(maxTime, minTime + complexity * 100); // Adjust the scaling factor as needed
+    }
+
     // Function to simulate human-like play
-    function simulateHumanPlay(bestMove, alternativeMoves) {
+    function simulateHumanPlay(bestMove, alternativeMoves, boardState) {
         if (!myVars.humanMode || !myVars.humanMode.active) {
             return bestMove; // Return the best move if human mode is not active
         }
-        
-        const { errorRate, blunderRate, moveTime } = myVars.humanMode;
-        
-        // Simulate thinking time for human-like behavior
-        const thinkingTime = Math.random() * (moveTime.max - moveTime.min) + moveTime.min;
-        
+
+        // Validate boardState
+        if (!Array.isArray(boardState) || boardState.length !== 8 || !boardState.every(row => Array.isArray(row) && row.length === 8)) {
+            console.error('Invalid boardState:', boardState);
+            return bestMove; // Return the best move if boardState is invalid
+        }
+
+        const { errorRate, blunderRate } = myVars.humanMode;
+
+        // Calculate thinking time based on the current board state
+        const thinkingTime = calculateThinkingTime(boardState);
+
         // Function to select a move based on human-like error rates
         const selectMove = () => {
             const random = Math.random();
-            
+
             // Simulate a blunder (choosing a bad move)
             if (random < blunderRate && alternativeMoves.length > 2) {
                 // Pick one of the worst moves
                 const worstMoves = alternativeMoves.slice(-2);
                 return worstMoves[Math.floor(Math.random() * worstMoves.length)];
             }
-            // Simulate an error (choosing a suboptimal but not terrible move)
-            else if (random < errorRate + blunderRate && alternativeMoves.length > 0) {
-                // Pick a random move from the middle of the alternatives list
-                const middleIndex = Math.floor(alternativeMoves.length / 2);
-                const range = Math.max(1, Math.floor(alternativeMoves.length / 4));
-                const startIndex = Math.max(0, middleIndex - range);
-                const endIndex = Math.min(alternativeMoves.length, middleIndex + range);
-                const middleMoves = alternativeMoves.slice(startIndex, endIndex);
-                return middleMoves[Math.floor(Math.random() * middleMoves.length)];
-            }
-            // Otherwise, play the best move
-            else {
-                return bestMove;
-            }
+            // Otherwise, return the best move
+            return bestMove;
         };
-        
-        // Store the selected move to be played after the simulated thinking time
-        const selectedMove = selectMove();
-        console.log(`Human mode: Thinking for ${thinkingTime.toFixed(1)} seconds before playing ${selectedMove}`);
-        
-        // Return the selected move
-        return selectedMove;
+
+        // Return a promise that resolves after the thinking time
+        return new Promise((resolve) => {
+            setTimeout(() => {
+                resolve(selectMove());
+            }, thinkingTime);
+        });
     }
 
     // Function to extract opponent's rating from the page
@@ -2292,6 +2297,40 @@ function main() {
                 break;
         }
     };
+
+    // Function to evaluate the complexity of the board position
+    function evaluateBoardComplexity(boardState) {
+        let complexity = 0;
+
+        // Example evaluation criteria
+        const pieceValues = {
+            'p': 1,   // Pawn
+            'r': 5,   // Rook
+            'n': 3,   // Knight
+            'b': 3,   // Bishop
+            'q': 9,   // Queen
+            'k': 0,   // King (not counted)
+        };
+
+        // Loop through the board state to evaluate material balance
+        for (let row = 0; row < 8; row++) {
+            for (let col = 0; col < 8; col++) {
+                const piece = boardState[row][col];
+                if (piece) {
+                    const value = pieceValues[piece.toLowerCase()] || 0;
+                    complexity += piece === piece.toUpperCase() ? value : -value; // Add for white, subtract for black
+                }
+            }
+        }
+
+        // Additional complexity factors can be added here
+        // For example, consider piece activity, control of the center, etc.
+        // This is a simple example; you can expand it based on your needs
+
+        // Normalize complexity to a reasonable range
+        complexity = Math.abs(complexity); // Ensure it's positive
+        return Math.floor(complexity / 10); // Scale down for thinking time calculation
+    }
 }
 
 //Touching below may break the script
