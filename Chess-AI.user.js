@@ -1,12 +1,12 @@
 // ==UserScript==
-// @name         Chess.com-Hack
+// @name         Chess AI
 // @namespace    github.com/longkidkoolstar
 // @version      1.4.0
 // @description  Chess.com Bot/Cheat that finds the best move with evaluation bar and ELO control!
-// @author      longkidkoolstar
-// @license      Chess.com Bot/Cheat © 2023 by MrAuzzie#998142, © All Rights Reserved
-// @match       https://www.chess.com/play/*
-// @match       https://www.chess.com/game/*
+// @author       longkidkoolstar
+// @license      MIT
+// @match        https://www.chess.com/play/*
+// @match        https://www.chess.com/game/*
 // @icon         data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==
 // @grant       GM_getValue
 // @grant       GM_setValue
@@ -1418,35 +1418,31 @@ function main() {
             contentContainer.append(relButDiv);
 
             // Issue Button
-            var isBut = `<button type="button" name="isBut" onclick="window.confirm('Can I take you to the issues page?') ? document.location = 'https://github.com/Auzgame/userscripts/issues' : console.log('cancled')">Got An Issue/Bug?</button>`;
-            tmpDiv = document.createElement('div');
-            var isButDiv = document.createElement('div');
-
-            isButDiv.style = `
-             position: relative;
-             text-align: center;
-             margin: 0 0 8px 0;
-            `;
-
-            tmpDiv.innerHTML = isBut;
-            isBut = tmpDiv.firstChild;
-
-            isBut.id = 'isBut';
-            isBut.style = `
-            position: relative;
-			color: #ffffff;
-			background-color: #919191;
-			font-size: 16px;
-			border: none;
-			border-radius: 4px;
-			padding: 10px 20px;
-            letter-spacing: 1px;
-			cursor: pointer;
-            transition: background-color 0.3s;
-            `;
-
-            isButDiv.append(isBut);
-            contentContainer.append(isButDiv);
+            // var isBut = `<button type="button" name="isBut" onclick="window.confirm('Can I take you to the issues page?') ? document.location = 'https://github.com/Auzgame/userscripts/issues' : console.log('cancled')">Got An Issue/Bug?</button>`;
+            // tmpDiv = document.createElement('div');
+            // var isButDiv = document.createElement('div');
+            // isButDiv.style = `
+            //  position: relative;
+            //  text-align: center;
+            //  margin: 0 0 8px 0;
+            // `;
+            // tmpDiv.innerHTML = isBut;
+            // isBut = tmpDiv.firstChild;
+            // isBut.id = 'isBut';
+            // isBut.style = `
+            // position: relative;
+            // color: #ffffff;
+            // background-color: #919191;
+            // font-size: 16px;
+            // border: none;
+            // border-radius: 4px;
+            // padding: 10px 20px;
+            // letter-spacing: 1px;
+            // cursor: pointer;
+            // transition: background-color 0.3s;
+            // `;
+            // isButDiv.append(isBut);
+            // contentContainer.append(isButDiv);
 
             // Add event listeners for the new buttons and controls
             $('#applyDepth').on('click', function() {
