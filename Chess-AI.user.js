@@ -737,38 +737,44 @@ function main() {
         }
         
         myVars.fusionMode = enabled;
-        
+
         if (enabled) {
-            // Extract opponent rating and set engine ELO
-            const opponentRating = extractOpponentRating();
-            if (opponentRating) {
-                // Update the ELO slider to match opponent rating
-                if ($('#eloSlider')[0]) {
-                    // Clamp the rating to the slider's min/max values
-                    const clampedRating = Math.max(1000, Math.min(3000, opponentRating));
-                    $('#eloSlider')[0].value = clampedRating;
-                    $('#eloValue')[0].textContent = clampedRating;
-                    myVars.eloRating = clampedRating;
-                    
-                    // Set the engine ELO
-                    setEngineElo(clampedRating);
+            // Start polling for opponent ELO changes
+            myVars.pollingInterval = setInterval(() => {
+                const currentOpponentRating = extractOpponentRating(); // Get the current opponent rating
+                if (currentOpponentRating !== myVars.previousOpponentRating) {
+                    myVars.isNewGame = true; // Set new game flag
+                    myVars.previousOpponentRating = currentOpponentRating; // Update previous opponent rating
+
+                    // Update the ELO slider to match opponent rating
+                    if ($('#eloSlider')[0]) {
+                        // Clamp the rating to the slider's min/max values
+                        const clampedRating = Math.max(1000, Math.min(3000, currentOpponentRating));
+                        $('#eloSlider')[0].value = clampedRating;
+                        $('#eloValue')[0].textContent = clampedRating;
+                        myVars.eloRating = clampedRating;
+
+                        // Set the engine ELO
+                        setEngineElo(clampedRating);
+                    }
                 }
-            } else {
-                console.log('Could not extract opponent rating, fusion mode will not work correctly');
-            }
+            }, 2000); // Check every 2 seconds
         } else {
+            // Stop polling when fusion mode is disabled
+            clearInterval(myVars.pollingInterval);
+
             // Restore previous ELO setting when disabling fusion mode
             if (myVars.previousEloRating) {
                 if ($('#eloSlider')[0]) {
                     $('#eloSlider')[0].value = myVars.previousEloRating;
                     $('#eloValue')[0].textContent = myVars.previousEloRating;
                     myVars.eloRating = myVars.previousEloRating;
-                    
+
                     // Set the engine ELO back to previous value
                     setEngineElo(myVars.previousEloRating);
                 }
             }
-            
+
             // Reset the opponent rating info text
             const opponentRatingInfo = document.getElementById('opponentRatingInfo');
             if (opponentRatingInfo) {
