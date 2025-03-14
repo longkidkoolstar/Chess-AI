@@ -31,6 +31,7 @@ function main() {
     myVars.eloRating = 1500; // Default ELO rating
     myVars.currentEvaluation = 0; // Current evaluation value
     myVars.persistentHighlights = true; // Default to persistent highlights
+    myVars.moveIndicatorType = 'highlights'; // Default to highlights instead of arrows
     var myFunctions = document.myFunctions = {};
 
     // Create evaluation bar
@@ -223,8 +224,9 @@ function main() {
         const moveNotation = res1 + '-' + res2;
         myFunctions.addMoveToHistory(moveNotation, myVars.currentEvaluation, lastValue);
 
-        // Clear any existing highlights before adding new ones
+        // Clear any existing highlights and arrows before adding new ones
         myFunctions.clearHighlights();
+        myFunctions.clearArrows();
 
         if(myVars.autoMove == true){
             myFunctions.movePiece(res1, res2);
@@ -236,9 +238,10 @@ function main() {
         }
         isThinking = false;
 
-        // Only show arrows if the option is enabled
+        // Only show move indicators if the option is enabled
         if(myVars.showArrows !== false) {
-            res1 = res1.replace(/^a/, "1")
+            // Convert algebraic notation to numeric coordinates
+            let fromSquare = res1.replace(/^a/, "1")
                 .replace(/^b/, "2")
                 .replace(/^c/, "3")
                 .replace(/^d/, "4")
@@ -246,7 +249,7 @@ function main() {
                 .replace(/^f/, "6")
                 .replace(/^g/, "7")
                 .replace(/^h/, "8");
-            res2 = res2.replace(/^a/, "1")
+            let toSquare = res2.replace(/^a/, "1")
                 .replace(/^b/, "2")
                 .replace(/^c/, "3")
                 .replace(/^d/, "4")
@@ -255,32 +258,39 @@ function main() {
                 .replace(/^g/, "7")
                 .replace(/^h/, "8");
             
-            if (myVars.persistentHighlights) {
-                // Add highlights with custom class for easier removal later
-                $(board.nodeName)
-                    .prepend('<div class="highlight square-' + res2 + ' bro persistent-highlight" style="background-color: rgb(235, 97, 80); opacity: 0.71;" data-test-element="highlight"></div>');
-                
-                $(board.nodeName)
-                    .prepend('<div class="highlight square-' + res1 + ' bro persistent-highlight" style="background-color: rgb(235, 97, 80); opacity: 0.71;" data-test-element="highlight"></div>');
+            // Use arrows or highlights based on user preference
+            if (myVars.moveIndicatorType === 'arrows') {
+                // Draw an arrow from the source to the destination square
+                myFunctions.drawArrow(res1, res2, myVars.persistentHighlights);
             } else {
-                // Use the original temporary highlights
-                $(board.nodeName)
-                    .prepend('<div class="highlight square-' + res2 + ' bro" style="background-color: rgb(235, 97, 80); opacity: 0.71;" data-test-element="highlight"></div>')
-                    .children(':first')
-                    .delay(1800)
-                    .queue(function() {
-                    $(this)
-                        .remove();
-                });
-                
-                $(board.nodeName)
-                    .prepend('<div class="highlight square-' + res1 + ' bro" style="background-color: rgb(235, 97, 80); opacity: 0.71;" data-test-element="highlight"></div>')
-                    .children(':first')
-                    .delay(1800)
-                    .queue(function() {
-                    $(this)
-                        .remove();
-                });
+                // Use the original highlighting method
+                if (myVars.persistentHighlights) {
+                    // Add highlights with custom class for easier removal later
+                    $(board.nodeName)
+                        .prepend('<div class="highlight square-' + toSquare + ' bro persistent-highlight" style="background-color: rgb(235, 97, 80); opacity: 0.71;" data-test-element="highlight"></div>');
+                    
+                    $(board.nodeName)
+                        .prepend('<div class="highlight square-' + fromSquare + ' bro persistent-highlight" style="background-color: rgb(235, 97, 80); opacity: 0.71;" data-test-element="highlight"></div>');
+                } else {
+                    // Use the original temporary highlights
+                    $(board.nodeName)
+                        .prepend('<div class="highlight square-' + toSquare + ' bro" style="background-color: rgb(235, 97, 80); opacity: 0.71;" data-test-element="highlight"></div>')
+                        .children(':first')
+                        .delay(1800)
+                        .queue(function() {
+                        $(this)
+                            .remove();
+                    });
+                    
+                    $(board.nodeName)
+                        .prepend('<div class="highlight square-' + fromSquare + ' bro" style="background-color: rgb(235, 97, 80); opacity: 0.71;" data-test-element="highlight"></div>')
+                        .children(':first')
+                        .delay(1800)
+                        .queue(function() {
+                        $(this)
+                            .remove();
+                    });
+                }
             }
         }
     }
@@ -291,10 +301,107 @@ function main() {
         $('.persistent-highlight').remove();
     }
 
-    // Modify the movePiece function to clear highlights when a move is made
+    // Add a function to clear arrows
+    myFunctions.clearArrows = function() {
+        // Remove all arrows
+        $('.chess-arrow-svg').remove();
+    }
+
+    // Function to draw an arrow on the chess board
+    myFunctions.drawArrow = function(from, to, isPersistent) {
+        // Convert algebraic notation to coordinates
+        const files = {'a': 0, 'b': 1, 'c': 2, 'd': 3, 'e': 4, 'f': 5, 'g': 6, 'h': 7};
+        const ranks = {'1': 7, '2': 6, '3': 5, '4': 4, '5': 3, '6': 2, '7': 1, '8': 0};
+        
+        const fromFile = files[from[0]];
+        const fromRank = ranks[from[1]];
+        const toFile = files[to[0]];
+        const toRank = ranks[to[1]];
+        
+        // Get the board element and its dimensions
+        const boardElement = $(board.nodeName)[0];
+        const boardRect = boardElement.getBoundingClientRect();
+        const squareSize = boardRect.width / 8;
+        
+        // Calculate the center coordinates of the squares
+        const fromX = (fromFile + 0.5) * squareSize;
+        const fromY = (fromRank + 0.5) * squareSize;
+        const toX = (toFile + 0.5) * squareSize;
+        const toY = (toRank + 0.5) * squareSize;
+        
+        // Create SVG element for the arrow
+        const svgNS = "http://www.w3.org/2000/svg";
+        const svg = document.createElementNS(svgNS, "svg");
+        svg.setAttribute("width", boardRect.width);
+        svg.setAttribute("height", boardRect.height);
+        svg.setAttribute("class", "chess-arrow-svg");
+        svg.style.position = "absolute";
+        svg.style.top = "0";
+        svg.style.left = "0";
+        svg.style.pointerEvents = "none";
+        svg.style.zIndex = "100";
+        
+        // Calculate the angle and length of the arrow
+        const dx = toX - fromX;
+        const dy = toY - fromY;
+        const angle = Math.atan2(dy, dx);
+        const length = Math.sqrt(dx * dx + dy * dy);
+        
+        // Adjust start and end points to not cover the pieces
+        const margin = squareSize * 0.3;
+        const startX = fromX + Math.cos(angle) * margin;
+        const startY = fromY + Math.sin(angle) * margin;
+        const endX = toX - Math.cos(angle) * margin;
+        const endY = toY - Math.sin(angle) * margin;
+        
+        // Create the arrow line
+        const line = document.createElementNS(svgNS, "line");
+        line.setAttribute("x1", startX);
+        line.setAttribute("y1", startY);
+        line.setAttribute("x2", endX);
+        line.setAttribute("y2", endY);
+        line.setAttribute("stroke", "rgb(235, 97, 80)");
+        line.setAttribute("stroke-width", squareSize / 8);
+        line.setAttribute("opacity", "0.8");
+        
+        // Create the arrow head
+        const arrowHead = document.createElementNS(svgNS, "polygon");
+        const arrowSize = squareSize / 4;
+        const arrowAngle = Math.PI / 7;
+        
+        const point1X = endX;
+        const point1Y = endY;
+        const point2X = endX - arrowSize * Math.cos(angle - arrowAngle);
+        const point2Y = endY - arrowSize * Math.sin(angle - arrowAngle);
+        const point3X = endX - arrowSize * Math.cos(angle + arrowAngle);
+        const point3Y = endY - arrowSize * Math.sin(angle + arrowAngle);
+        
+        arrowHead.setAttribute("points", `${point1X},${point1Y} ${point2X},${point2Y} ${point3X},${point3Y}`);
+        arrowHead.setAttribute("fill", "rgb(235, 97, 80)");
+        arrowHead.setAttribute("opacity", "0.8");
+        
+        // Add elements to SVG
+        svg.appendChild(line);
+        svg.appendChild(arrowHead);
+        
+        // Add the SVG to the board
+        boardElement.appendChild(svg);
+        
+        // If not persistent, remove after delay
+        if (!isPersistent) {
+            setTimeout(() => {
+                if (svg.parentNode) {
+                    svg.parentNode.removeChild(svg);
+                }
+            }, 1800);
+        }
+    }
+
+    // Modify the movePiece function to clear highlights and arrows when a move is made
     myFunctions.movePiece = function(from, to){
-        // Clear any existing highlights when a move is made
+        // Clear any existing highlights and arrows when a move is made
         myFunctions.clearHighlights();
+        myFunctions.clearArrows();
         
         for (var each=0;each<board.game.getLegalMoves().length;each++){
             if(board.game.getLegalMoves()[each].from == from){
@@ -1350,9 +1457,21 @@ function main() {
                             <label for="showArrows"> Show move arrows</label>
                         </div>
                         
-                        <div style="display: flex; align-items: center;">
+                        <div style="display: flex; align-items: center; margin-bottom: 12px;">
                             <input type="checkbox" id="persistentHighlights" name="persistentHighlights" value="true" checked style="margin-right: 8px;">
                             <label for="persistentHighlights"> Keep highlights until next move</label>
+                        </div>
+
+                        <div style="margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px;">
+                            <label style="display: block; margin-bottom: 8px; font-weight: bold;">Move Indicator Style:</label>
+                            <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                                <input type="radio" id="moveIndicatorHighlights" name="moveIndicatorType" value="highlights" checked style="margin-right: 8px;">
+                                <label for="moveIndicatorHighlights"> Highlights</label>
+                            </div>
+                            <div style="display: flex; align-items: center;">
+                                <input type="radio" id="moveIndicatorArrows" name="moveIndicatorType" value="arrows" style="margin-right: 8px;">
+                                <label for="moveIndicatorArrows"> Arrows</label>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -2140,6 +2259,15 @@ function main() {
                 }
             });
             
+            // Add event listeners for the move indicator type radio buttons
+            $('input[name="moveIndicatorType"]').on('change', function() {
+                myVars.moveIndicatorType = this.value;
+                
+                // Clear any existing highlights and arrows when changing the indicator type
+                myFunctions.clearHighlights();
+                myFunctions.clearArrows();
+            });
+            
             // Improved visual feedback for toggle switches
             $('.switch input[type="checkbox"]').each(function() {
                 const statusElement = $('#' + this.id + 'Status');
@@ -2266,6 +2394,11 @@ function main() {
             if($('#autoMove')[0]) myVars.autoMove = $('#autoMove')[0].checked;
             if($('#showArrows')[0]) myVars.showArrows = $('#showArrows')[0].checked;
             
+            // Update move indicator type if radio buttons exist
+            if($('input[name="moveIndicatorType"]:checked')[0]) {
+                myVars.moveIndicatorType = $('input[name="moveIndicatorType"]:checked')[0].value;
+            }
+            
             // Check if turn has changed
             const currentTurn = board.game.getTurn() == board.game.getPlayingAs();
             const turnChanged = currentTurn !== myTurn;
@@ -2320,8 +2453,9 @@ function main() {
         if (board && myVars.lastPositionFEN) {
             const currentFEN = board.game.getFEN();
             if (currentFEN !== myVars.lastPositionFEN) {
-                // Position changed, clear highlights
+                // Position changed, clear highlights and arrows
                 myFunctions.clearHighlights();
+                myFunctions.clearArrows();
                 myVars.lastPositionFEN = currentFEN;
             }
         }
@@ -2334,6 +2468,7 @@ function main() {
             depth: parseInt($('#depthSlider')[0].value),
             showArrows: $('#showArrows')[0].checked,
             persistentHighlights: $('#persistentHighlights')[0].checked,
+            moveIndicatorType: myVars.moveIndicatorType || 'highlights',
             autoRun: $('#autoRun')[0].checked,
             autoMove: $('#autoMove')[0].checked,
             timeDelayMin: parseFloat($('#timeDelayMin')[0].value),
@@ -2429,6 +2564,15 @@ function main() {
                 if (settings.persistentHighlights !== undefined) {
                     $('#persistentHighlights')[0].checked = settings.persistentHighlights;
                     myVars.persistentHighlights = settings.persistentHighlights;
+                }
+                
+                if (settings.moveIndicatorType) {
+                    myVars.moveIndicatorType = settings.moveIndicatorType;
+                    $(`#moveIndicator${settings.moveIndicatorType.charAt(0).toUpperCase() + settings.moveIndicatorType.slice(1)}`).prop('checked', true);
+                } else {
+                    // Default to highlights if not set
+                    myVars.moveIndicatorType = 'highlights';
+                    $('#moveIndicatorHighlights').prop('checked', true);
                 }
                 
                 if (settings.autoRun !== undefined) {
