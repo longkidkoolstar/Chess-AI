@@ -1100,30 +1100,185 @@ function main() {
             // Create content container
             var contentContainer = document.createElement('div');
             contentContainer.id = 'aiControlsContent';
-            contentContainer.style = 'padding: 10px;';
+            contentContainer.style = 'padding: 15px; font-family: Arial, sans-serif;';
             
-            var content = `<div style="margin: 0 0 0 8px;"><br>
+            // Add CSS for tabs
+            var tabStyle = document.createElement('style');
+            tabStyle.textContent = `
+                .tab-container {
+                    width: 100%;
+                }
+                .tab-nav {
+                    display: flex;
+                    border-bottom: 2px solid #2196F3;
+                    margin-bottom: 15px;
+                    overflow-x: auto; /* Allow scrolling if too many tabs */
+                }
+                .tab-button {
+                    padding: 8px 12px;
+                    background-color: #f1f1f1;
+                    border: none;
+                    border-radius: 8px 8px 0 0;
+                    margin-right: 2px;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                    font-weight: bold;
+                    color: #666;
+                    flex: 1;
+                    text-align: center;
+                }
+                .tab-button:hover {
+                    background-color: #e0e0e0;
+                }
+                .tab-button.active {
+                    background-color: #2196F3;
+                    color: white;
+                }
+                .tab-content {
+                    display: none;
+                    padding: 10px 0;
+                }
+                .tab-content.active {
+                    display: block;
+                    animation: fadeIn 0.3s;
+                }
+                @keyframes fadeIn {
+                    from { opacity: 0; }
+                    to { opacity: 1; }
+                }
+                
+                /* Responsive design for small screens */
+                @media (max-width: 500px) {
+                    .tab-button {
+                        padding: 8px 5px;
+                        font-size: 12px;
+                    }
+                }
+                
+                /* Toggle switch styles */
+                .switch {
+                    position: relative;
+                    display: inline-block;
+                    width: 46px;
+                    height: 24px;
+                }
+                
+                .switch input {
+                    opacity: 0;
+                    width: 0;
+                    height: 0;
+                }
+                
+                .slider {
+                    position: absolute;
+                    cursor: pointer;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background-color: #ccc;
+                    transition: .4s;
+                }
+                
+                .slider:before {
+                    position: absolute;
+                    content: "";
+                    height: 18px;
+                    width: 18px;
+                    left: 3px;
+                    bottom: 3px;
+                    background-color: white;
+                    transition: .4s;
+                }
+                
+                input:checked + .slider {
+                    background-color: #2196F3;
+                }
+                
+                input:focus + .slider {
+                    box-shadow: 0 0 1px #2196F3;
+                }
+                
+                input:checked + .slider:before {
+                    transform: translateX(22px);
+                }
+                
+                .slider.round {
+                    border-radius: 24px;
+                }
+                
+                .slider.round:before {
+                    border-radius: 50%;
+                }
+                
+                /* Tooltip styles */
+                [title] {
+                    position: relative;
+                }
+                
+                [title]:hover::after {
+                    content: attr(title);
+                    position: absolute;
+                    bottom: 100%;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    background-color: #333;
+                    color: white;
+                    padding: 5px 10px;
+                    border-radius: 4px;
+                    white-space: nowrap;
+                    z-index: 1000;
+                    font-size: 12px;
+                }
+            `;
+            document.head.appendChild(tabStyle);
+            
+            var content = `<div style="margin: 0;">
+            <!-- Tab Navigation -->
+            <div class="tab-container">
+                <div class="tab-nav">
+                    <button class="tab-button active" data-tab="engine">Engine</button>
+                    <button class="tab-button" data-tab="playstyle">Play Style</button>
+                    <button class="tab-button" data-tab="visual">Visual</button>
+                    <button class="tab-button" data-tab="auto">Auto</button>
+                    <button class="tab-button" data-tab="actions">Actions</button>
+                </div>
+                
+                <!-- Engine Tab -->
+                <div id="engine-tab" class="tab-content active">
             <div style="margin-bottom: 15px;">
-                <p id="depthText">Current Depth: <strong>11</strong></p>
-                <label for="depthSlider">Adjust Depth (1-30):</label><br>
+                        <p id="depthText" style="margin: 0 0 5px 0;">Current Depth: <strong>11</strong></p>
+                        <div style="display: flex; align-items: center;">
+                            <div style="flex-grow: 1;">
+                                <label for="depthSlider" style="display: block; margin-bottom: 5px;">Adjust Depth (1-30):</label>
                 <input type="range" id="depthSlider" name="depthSlider" min="1" max="30" step="1" value="11" 
-                       oninput="document.getElementById('depthText').innerHTML = 'Current Depth: <strong>' + this.value + '</strong>';" style="width: 80%;">
-                <button id="applyDepth" style="margin-left: 10px; padding: 2px 8px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">Apply</button>
+                                    oninput="document.getElementById('depthText').innerHTML = 'Current Depth: <strong>' + this.value + '</strong>';" 
+                                    style="width: 100%;">
+                            </div>
+                            <button id="applyDepth" style="margin-left: 10px; padding: 5px 10px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">Apply</button>
+                        </div>
             </div>
             
             <div style="margin-bottom: 15px;">
-                <label for="eloSlider">Engine ELO Rating: <span id="eloValue">1500</span></label>
-                <button id="eloInfoBtn" style="margin-left: 5px; padding: 0 5px; background-color: #2196F3; color: white; border: none; border-radius: 50%; cursor: pointer; font-size: 12px;">?</button><br>
+                        <div style="display: flex; align-items: center; margin-bottom: 5px;">
+                            <label for="eloSlider" style="margin-right: 5px;">Engine ELO Rating: <span id="eloValue">1500</span></label>
+                            <button id="eloInfoBtn" title="ELO rating determines the playing strength of the engine" style="margin-left: 5px; padding: 0 5px; background-color: #2196F3; color: white; border: none; border-radius: 50%; cursor: pointer; font-size: 12px;">?</button>
+                        </div>
                 <input type="range" id="eloSlider" name="eloSlider" min="1000" max="3000" step="50" value="1500" 
-                       oninput="document.myFunctions.updateEngineElo()" style="width: 80%;">
-                <div id="eloDepthInfo" style="font-size: 12px; color: #666; margin-top: 5px;">
+                               oninput="document.myFunctions.updateEngineElo()" style="width: 100%;">
+                        <div id="eloDepthInfo" style="font-size: 12px; color: #666; margin-top: 5px; font-style: italic;">
                     Note: Lower ELO settings will limit the maximum search depth
+                        </div>
                 </div>
             </div>
             
-            <div style="margin-bottom: 15px;">
-                <div style="display: flex; align-items: center; margin: 10px 0;">
-                    <label for="fusionModeToggle" style="margin-right: 10px;">Fusion Mode (Match Opponent Rating):</label>
+                <!-- Play Style Tab -->
+                <div id="playstyle-tab" class="tab-content">
+                    <div style="display: flex; flex-direction: column; gap: 15px;">
+                        <!-- Fusion Mode -->
+                        <div style="border-left: 3px solid #2196F3; padding-left: 10px;">
+                            <div style="display: flex; align-items: center; margin-bottom: 5px;">
+                                <label for="fusionModeToggle" style="margin-right: 10px; font-weight: bold;">Fusion Mode:</label>
                     <label class="switch">
                         <input type="checkbox" id="fusionMode" name="fusionMode" value="false">
                         <span class="slider round"></span>
@@ -1131,23 +1286,27 @@ function main() {
                     <span id="fusionModeStatus" style="margin-left: 10px; font-size: 12px; color: #666;">Off</span>
                 </div>
                 <div id="opponentRatingInfo" style="font-size: 12px; color: #666; margin-top: 5px;">
-                    When enabled, the engine will play at the same rating as your opponent
+                                When enabled, the engine will match your opponent's rating
                 </div>
             </div>
             
-            <div style="margin-bottom: 15px;">
-                <div style="display: flex; align-items: center; margin: 10px 0;">
-                    <label for="humanModeToggle" style="margin-right: 10px;">Human Mode:</label>
+                        <!-- Human Mode -->
+                        <div style="border-left: 3px solid #9C27B0; padding-left: 10px;">
+                            <div style="display: flex; align-items: center; margin-bottom: 5px;">
+                                <label for="humanModeToggle" style="margin-right: 10px; font-weight: bold;">Human Mode:</label>
                     <label class="switch">
                         <input type="checkbox" id="humanMode" name="humanMode" value="false">
                         <span class="slider round"></span>
                     </label>
                     <span id="humanModeStatus" style="margin-left: 10px; font-size: 12px; color: #666;">Off</span>
                 </div>
+                            
                 <div style="margin-top: 10px;">
-                    <label for="humanModeSelect">Human Skill Level: <span id="humanModeLevel">Intermediate</span></label>
-                    <button id="humanModeInfoBtn" style="margin-left: 5px; padding: 0 5px; background-color: #2196F3; color: white; border: none; border-radius: 50%; cursor: pointer; font-size: 12px;">?</button><br>
-                    <select id="humanModeSelect" style="width: 80%; padding: 5px; margin-top: 5px;">
+                                <div style="display: flex; align-items: center; margin-bottom: 5px;">
+                                    <label for="humanModeSelect" style="margin-right: 5px;">Human Skill Level: <span id="humanModeLevel">Intermediate</span></label>
+                                    <button id="humanModeInfoBtn" title="Choose how the engine mimics human play" style="margin-left: 5px; padding: 0 5px; background-color: #9C27B0; color: white; border: none; border-radius: 50%; cursor: pointer; font-size: 12px;">?</button>
+                                </div>
+                                <select id="humanModeSelect" style="width: 100%; padding: 8px; margin-top: 5px; border-radius: 4px; border: 1px solid #ddd;">
                         <option value="beginner">Beginner (ELO ~800)</option>
                         <option value="casual">Casual (ELO ~1200)</option>
                         <option value="intermediate" selected>Intermediate (ELO ~1600)</option>
@@ -1155,14 +1314,18 @@ function main() {
                         <option value="expert">Expert (ELO ~2400)</option>
                     </select>
                 </div>
-                <div id="humanModeInfo" style="font-size: 12px; color: #666; margin-top: 5px;">
+                            <div id="humanModeInfo" style="font-size: 12px; color: #666; margin-top: 5px; font-style: italic;">
                     When enabled, the engine will play like a human with realistic mistakes and timing
+                            </div>
+                        </div>
                 </div>
             </div>
             
+                <!-- Visual Settings Tab -->
+                <div id="visual-tab" class="tab-content">
             <div style="margin-bottom: 15px;">
-                <label for="evalBarColor">Evaluation Bar Color Theme:</label><br>
-                <select id="evalBarColor" style="width: 80%; padding: 5px; margin-top: 5px;">
+                        <label for="evalBarColor" style="display: block; margin-bottom: 5px;">Evaluation Bar Color Theme:</label>
+                        <select id="evalBarColor" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ddd;">
                     <option value="default">Default (Green/Red)</option>
                     <option value="blue">Blue/Orange</option>
                     <option value="purple">Purple/Yellow</option>
@@ -1170,22 +1333,35 @@ function main() {
                 </select>
             </div>
             
-            <div id="customColorContainer" style="display: none; margin-bottom: 15px;">
-                <label for="whiteAdvantageColor">White Advantage Color:</label>
-                <input type="color" id="whiteAdvantageColor" value="#4CAF50"><br>
-                <label for="blackAdvantageColor">Black Advantage Color:</label>
-                <input type="color" id="blackAdvantageColor" value="#F44336">
+                    <div id="customColorContainer" style="display: none; margin-bottom: 15px; padding: 10px; border: 1px dashed #ccc; border-radius: 4px;">
+                        <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px;">
+                            <label for="whiteAdvantageColor">White Advantage:</label>
+                            <input type="color" id="whiteAdvantageColor" value="#4CAF50" style="width: 40px; height: 30px;">
+                        </div>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <label for="blackAdvantageColor">Black Advantage:</label>
+                            <input type="color" id="blackAdvantageColor" value="#F44336" style="width: 40px; height: 30px;">
+                        </div>
             </div>
             
             <div style="margin-bottom: 15px;">
-                <input type="checkbox" id="showArrows" name="showArrows" value="true" checked>
-                <label for="showArrows"> Show move arrows</label><br>
+                        <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                            <input type="checkbox" id="showArrows" name="showArrows" value="true" checked style="margin-right: 8px;">
+                            <label for="showArrows"> Show move arrows</label>
+                        </div>
+                        
+                        <div style="display: flex; align-items: center;">
+                            <input type="checkbox" id="persistentHighlights" name="persistentHighlights" value="true" checked style="margin-right: 8px;">
+                            <label for="persistentHighlights"> Keep highlights until next move</label>
+                        </div>
+                    </div>
+                </div>
                 
-                <input type="checkbox" id="persistentHighlights" name="persistentHighlights" value="true" checked>
-                <label for="persistentHighlights"> Keep highlights until next move</label><br>
-                
-                <div style="display: flex; align-items: center; margin: 10px 0;">
-                    <label for="autoRunToggle" style="margin-right: 10px;">Auto Run:</label>
+                <!-- Automation Tab -->
+                <div id="auto-tab" class="tab-content">
+                    <div style="margin-bottom: 15px;">
+                        <div style="display: flex; align-items: center; margin-bottom: 10px;">
+                            <label for="autoRunToggle" style="margin-right: 10px; font-weight: bold;">Auto Run:</label>
                     <label class="switch">
                         <input type="checkbox" id="autoRun" name="autoRun" value="false">
                         <span class="slider round"></span>
@@ -1193,35 +1369,80 @@ function main() {
                     <span id="autoRunStatus" style="margin-left: 10px; font-size: 12px; color: #666;">Off</span>
                 </div>
                 
-                <input type="checkbox" id="autoMove" name="autoMove" value="false">
-                <label for="autoMove"> Enable auto move</label><br>
+                        <div style="display: flex; align-items: center; margin-bottom: 10px;">
+                            <input type="checkbox" id="autoMove" name="autoMove" value="false" style="margin-right: 8px;">
+                            <label for="autoMove"> Enable auto move</label>
             </div>
             
-            <div style="margin-bottom: 15px;">
-                <label for="timeDelayMin">Auto Run Delay (Seconds):</label><br>
-                <input type="number" id="timeDelayMin" name="timeDelayMin" min="0.1" value="0.1" style="width: 60px;">
-                <span> to </span>
-                <input type="number" id="timeDelayMax" name="timeDelayMax" min="0.1" value="1" style="width: 60px;">
+                        <div style="margin-top: 10px;">
+                            <label for="timeDelayMin" style="display: block; margin-bottom: 5px;">Auto Run Delay (Seconds):</label>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <input type="number" id="timeDelayMin" name="timeDelayMin" min="0.1" value="0.1" style="width: 70px; padding: 5px; border-radius: 4px; border: 1px solid #ddd;">
+                                <span>to</span>
+                                <input type="number" id="timeDelayMax" name="timeDelayMax" min="0.1" value="1" style="width: 70px; padding: 5px; border-radius: 4px; border: 1px solid #ddd;">
+            </div>
+                        </div>
+                    </div>
             </div>
             
-            <div style="margin-bottom: 15px;">
-                <button id="runEngineBtn" style="padding: 8px 15px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px;">Run Engine</button>
-                <button id="stopEngineBtn" style="padding: 8px 15px; background-color: #F44336; color: white; border: none; border-radius: 4px; cursor: pointer;">Stop Engine</button>
+                <!-- Actions Tab -->
+                <div id="actions-tab" class="tab-content">
+                    <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                        <button id="runEngineBtn" style="flex: 1; padding: 10px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">
+                            <span style="display: flex; align-items: center; justify-content: center;">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 5px;">
+                                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                                </svg>
+                                Run Engine
+                            </span>
+                        </button>
+                        <button id="stopEngineBtn" style="flex: 1; padding: 10px; background-color: #F44336; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">
+                            <span style="display: flex; align-items: center; justify-content: center;">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 5px;">
+                                    <rect x="6" y="6" width="12" height="12"></rect>
+                                </svg>
+                                Stop Engine
+                            </span>
+                        </button>
             </div>
             
-            <div style="margin-bottom: 15px;">
-                <button id="saveSettingsBtn" style="padding: 8px 15px; background-color: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%;">Save Settings</button>
-            </div>
-            
-            <div style="margin-bottom: 15px;">
-                <button id="showKeyboardShortcuts" style="padding: 8px 15px; background-color: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%;">Show Keyboard Shortcuts</button>
+                    <button id="saveSettingsBtn" style="width: 100%; padding: 10px; background-color: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; margin-bottom: 10px;">
+                        <span style="display: flex; align-items: center; justify-content: center;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 5px;">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                <polyline points="7 3 7 8 15 8"></polyline>
+                            </svg>
+                            Save Settings
+                        </span>
+                    </button>
+                    
+                    <button id="showKeyboardShortcuts" style="width: 100%; padding: 10px; background-color: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">
+                        <span style="display: flex; align-items: center; justify-content: center;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 5px;">
+                                <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect>
+                                <line x1="6" y1="8" x2="6" y2="8"></line>
+                                <line x1="10" y1="8" x2="10" y2="8"></line>
+                                <line x1="14" y1="8" x2="14" y2="8"></line>
+                                <line x1="18" y1="8" x2="18" y2="8"></line>
+                                <line x1="8" y1="12" x2="16" y2="12"></line>
+                                <line x1="6" y1="16" x2="6" y2="16"></line>
+                                <line x1="18" y1="16" x2="18" y2="16"></line>
+                                <line x1="10" y1="16" x2="14" y2="16"></line>
+                            </svg>
+                            Keyboard Shortcuts
+                        </span>
+                    </button>
+                </div>
             </div>
             </div>`;
             
             contentContainer.innerHTML = content;
             div.appendChild(contentContainer);
             
-            // Create keyboard shortcuts modal
+            // Move history will be added later in the code
+            
+            // Create keyboard shortcuts modal with improved styling
             var keyboardModal = document.createElement('div');
             keyboardModal.id = 'keyboardShortcutsModal';
             keyboardModal.style = `
@@ -1246,6 +1467,7 @@ function main() {
                 max-height: 80vh;
                 overflow-y: auto;
                 position: relative;
+                box-shadow: 0 4px 20px rgba(0,0,0,0.2);
             `;
             
             var closeBtn = document.createElement('span');
@@ -1257,7 +1479,14 @@ function main() {
                 font-size: 24px;
                 cursor: pointer;
                 color: #333;
+                transition: color 0.2s;
             `;
+            closeBtn.onmouseover = function() {
+                this.style.color = '#F44336';
+            };
+            closeBtn.onmouseout = function() {
+                this.style.color = '#333';
+            };
             closeBtn.onclick = function() {
                 keyboardModal.style.display = 'none';
             };
@@ -1266,8 +1495,14 @@ function main() {
             
             var shortcutsTitle = document.createElement('h2');
             shortcutsTitle.textContent = 'Keyboard Shortcuts';
-            shortcutsTitle.style = 'margin-top: 0; color: #2196F3;';
+            shortcutsTitle.style = 'margin-top: 0; color: #2196F3; border-bottom: 2px solid #eee; padding-bottom: 10px;';
             modalContent.appendChild(shortcutsTitle);
+            
+            // Add a brief description
+            var shortcutsDescription = document.createElement('p');
+            shortcutsDescription.textContent = 'Press any of these keys to quickly run the engine at different depths.';
+            shortcutsDescription.style = 'margin-bottom: 20px; color: #666;';
+            modalContent.appendChild(shortcutsDescription);
             
             var shortcutsTable = document.createElement('table');
             shortcutsTable.style = 'width: 100%; border-collapse: collapse;';
@@ -1275,9 +1510,9 @@ function main() {
             // Create table header
             var tableHeader = document.createElement('thead');
             tableHeader.innerHTML = `
-                <tr>
-                    <th style="text-align: left; padding: 8px; border-bottom: 2px solid #ddd;">Key</th>
-                    <th style="text-align: left; padding: 8px; border-bottom: 2px solid #ddd;">Function</th>
+                <tr style="background-color: #f5f5f5;">
+                    <th style="text-align: left; padding: 12px; border-bottom: 2px solid #ddd; width: 20%;">Key</th>
+                    <th style="text-align: left; padding: 12px; border-bottom: 2px solid #ddd;">Function</th>
                 </tr>
             `;
             shortcutsTable.appendChild(tableHeader);
@@ -1316,21 +1551,68 @@ function main() {
                 { key: '=', function: 'Run engine at depth 100 (maximum)' }
             ];
             
-            // Add rows for each shortcut
-            shortcuts.forEach(shortcut => {
+            // Group shortcuts by rows of 3 for better readability
+            const shortcutGroups = [];
+            for (let i = 0; i < shortcuts.length; i += 3) {
+                shortcutGroups.push(shortcuts.slice(i, i + 3));
+            }
+            
+            // Add rows for each shortcut group
+            shortcutGroups.forEach((group, index) => {
                 const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td style="padding: 8px; border-bottom: 1px solid #ddd;">${shortcut.key}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #ddd;">${shortcut.function}</td>
-                `;
+                row.style = index % 2 === 0 ? '' : 'background-color: #f9f9f9;';
+                
+                let rowHTML = '';
+                group.forEach(shortcut => {
+                    rowHTML += `
+                        <td style="padding: 10px; border-bottom: 1px solid #eee;">
+                            <kbd style="background-color: #f1f1f1; border: 1px solid #ccc; border-radius: 4px; padding: 2px 6px; font-family: monospace;">${shortcut.key}</kbd>
+                        </td>
+                        <td style="padding: 10px; border-bottom: 1px solid #eee;">${shortcut.function}</td>
+                    `;
+                });
+                
+                // Fill empty cells if needed
+                const emptyCellsNeeded = 3 - group.length;
+                for (let i = 0; i < emptyCellsNeeded; i++) {
+                    rowHTML += `
+                        <td style="padding: 10px; border-bottom: 1px solid #eee;"></td>
+                        <td style="padding: 10px; border-bottom: 1px solid #eee;"></td>
+                    `;
+                }
+                
+                row.innerHTML = rowHTML;
                 tableBody.appendChild(row);
             });
             
             shortcutsTable.appendChild(tableBody);
             modalContent.appendChild(shortcutsTable);
             
+            // Add a note at the bottom
+            var shortcutsNote = document.createElement('p');
+            shortcutsNote.innerHTML = '<strong>Note:</strong> Higher depths provide stronger analysis but take longer to calculate.';
+            shortcutsNote.style = 'margin-top: 20px; color: #666; font-size: 13px; background-color: #f5f5f5; padding: 10px; border-radius: 4px;';
+            modalContent.appendChild(shortcutsNote);
+            
             keyboardModal.appendChild(modalContent);
             document.body.appendChild(keyboardModal);
+            
+            // Add JavaScript for tab switching
+            setTimeout(function() {
+                const tabButtons = document.querySelectorAll('.tab-button');
+                
+                tabButtons.forEach(button => {
+                    button.addEventListener('click', function() {
+                        // Remove active class from all tabs
+                        document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+                        document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+                        
+                        // Add active class to clicked tab
+                        this.classList.add('active');
+                        document.getElementById(this.dataset.tab + '-tab').classList.add('active');
+                    });
+                });
+            }, 500);
 
             board.parentElement.parentElement.appendChild(div);
             
@@ -1837,6 +2119,12 @@ function main() {
             
             $('#autoMove').on('change', function() {
                 myVars.autoMove = this.checked;
+                // Visual feedback for auto move toggle
+                if (this.checked) {
+                    $(this).parent().append('<span id="autoMoveStatus" style="margin-left: 10px; font-size: 12px; color: #4CAF50;">On</span>');
+                } else {
+                    $('#autoMoveStatus').remove();
+                }
             });
 
             $('#showArrows').on('change', function() {
@@ -1851,6 +2139,88 @@ function main() {
                     myFunctions.clearHighlights();
                 }
             });
+            
+            // Improved visual feedback for toggle switches
+            $('.switch input[type="checkbox"]').each(function() {
+                const statusElement = $('#' + this.id + 'Status');
+                if (statusElement.length) {
+                    if (this.checked) {
+                        statusElement.text('On');
+                        statusElement.css('color', '#4CAF50');
+                    } else {
+                        statusElement.text('Off');
+                        statusElement.css('color', '#666');
+                    }
+                }
+            });
+            
+            // Add visual feedback to buttons
+            $('#runEngineBtn, #stopEngineBtn, #saveSettingsBtn, #showKeyboardShortcuts, #applyDepth').each(function() {
+                $(this).css('transition', 'all 0.2s ease');
+                
+                $(this).hover(
+                    function() { 
+                        $(this).css({
+                            'opacity': '0.9',
+                            'transform': 'translateY(-1px)',
+                            'box-shadow': '0 2px 5px rgba(0,0,0,0.2)'
+                        });
+                    },
+                    function() { 
+                        $(this).css({
+                            'opacity': '1',
+                            'transform': 'translateY(0)',
+                            'box-shadow': 'none'
+                        });
+                    }
+                );
+                
+                $(this).mousedown(function() {
+                    $(this).css('transform', 'translateY(1px)');
+                });
+                
+                $(this).mouseup(function() {
+                    $(this).css('transform', 'translateY(-1px)');
+                });
+            });
+            
+            // Improve color theme selector
+            $('#evalBarColor').on('change', function() {
+                if (this.value === 'custom') {
+                    $('#customColorContainer').slideDown(200);
+                } else {
+                    $('#customColorContainer').slideUp(200);
+                }
+            });
+            
+            // Add tooltips to buttons and controls
+            $('#runEngineBtn').attr('title', 'Analyze the current position with the chess engine');
+            $('#stopEngineBtn').attr('title', 'Stop the engine analysis');
+            $('#saveSettingsBtn').attr('title', 'Save your current settings for future sessions');
+            $('#depthSlider').attr('title', 'Higher depth = stronger analysis but slower calculation');
+            $('#showArrows').attr('title', 'Display arrows showing the best moves on the board');
+            $('#persistentHighlights').attr('title', 'Keep move highlights visible until the next move is made');
+            $('#autoRun').attr('title', 'Automatically run the engine after each move');
+            $('#autoMove').attr('title', 'Automatically make the best move for your side');
+            $('#timeDelayMin').attr('title', 'Minimum delay before auto-running the engine');
+            $('#timeDelayMax').attr('title', 'Maximum delay before auto-running the engine');
+            
+            // Close modals when clicking outside
+            $('.modal-container').on('click', function(event) {
+                if (event.target === this) {
+                    $(this).css('display', 'none');
+                }
+            });
+            
+            // Add escape key to close modals
+            $(document).on('keydown', function(event) {
+                if (event.key === 'Escape') {
+                    $('.modal-container').css('display', 'none');
+                }
+            });
+            
+            // Add class to modals for easier selection
+            $('#keyboardShortcutsModal, #eloInfoModal, #humanModeInfoModal').addClass('modal-container');
 
             loaded = true;
         } catch (error) {console.log(error)}
