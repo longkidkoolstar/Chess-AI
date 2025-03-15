@@ -2813,85 +2813,186 @@ function main() {
     // Function to load user settings using await GM.getValue
     myFunctions.loadSettings = async function() {
         try {
-            // Load saved settings
-            const savedDepth = await GM.getValue('depth', 11);
-            const savedElo = await GM.getValue('elo', 1500);
-            const savedAutoMove = await GM.getValue('autoMove', false);
-            const savedAutoRun = await GM.getValue('autoRun', false);
-            const savedShowArrows = await GM.getValue('showArrows', true);
-            const savedPersistentHighlights = await GM.getValue('persistentHighlights', true);
-            const savedMoveIndicatorType = await GM.getValue('moveIndicatorType', 'highlights');
-            const savedHumanMode = await GM.getValue('humanMode', false);
-            const savedHumanLevel = await GM.getValue('humanLevel', 'intermediate');
-            const savedFusionMode = await GM.getValue('fusionMode', false);
-            const savedWhiteAdvantageColor = await GM.getValue('whiteAdvantageColor', '#4CAF50');
-            const savedBlackAdvantageColor = await GM.getValue('blackAdvantageColor', '#F44336');
-            const savedFirstRun = await GM.getValue('firstRun', true);
+            // First try to load settings from the combined JSON
+            const savedSettings = await GM.getValue('chessAISettings', null);
+            
+            if (savedSettings) {
+                // If settings exist as JSON, parse and apply them
+                const settings = JSON.parse(savedSettings);
+                
+                // Apply saved settings to myVars
+                myVars.eloRating = settings.eloRating || 1500;
+                myVars.depth = settings.depth || 11;
+                myVars.showArrows = settings.showArrows !== undefined ? settings.showArrows : true;
+                myVars.persistentHighlights = settings.persistentHighlights !== undefined ? settings.persistentHighlights : true;
+                myVars.moveIndicatorType = settings.moveIndicatorType || 'highlights';
+                myVars.autoRun = settings.autoRun !== undefined ? settings.autoRun : false;
+                myVars.autoMove = settings.autoMove !== undefined ? settings.autoMove : false;
+                myVars.fusionMode = settings.fusionMode !== undefined ? settings.fusionMode : false;
+                myVars.whiteAdvantageColor = settings.whiteAdvantageColor || '#4CAF50';
+                myVars.blackAdvantageColor = settings.blackAdvantageColor || '#F44336';
+                
+                // Set humanMode
+                if (settings.humanMode) {
+                    myVars.humanMode = {
+                        active: settings.humanMode.active,
+                        level: settings.humanMode.level
+                    };
+                } else {
+                    myVars.humanMode = { active: false, level: 'intermediate' };
+                }
+                
+                // Update UI elements
+                if ($('#depthSlider')[0]) {
+                    $('#depthSlider')[0].value = myVars.depth;
+                    $('#depthText').html('Current Depth: <strong>' + myVars.depth + '</strong>');
+                }
+                
+                if ($('#eloSlider')[0]) {
+                    $('#eloSlider')[0].value = myVars.eloRating;
+                    $('#eloText').html('Current ELO: <strong>' + myVars.eloRating + '</strong>');
+                }
+                
+                if ($('#autoMove')[0]) {
+                    $('#autoMove')[0].checked = myVars.autoMove;
+                }
+                
+                if ($('#autoRun')[0]) {
+                    $('#autoRun')[0].checked = myVars.autoRun;
+                }
+                
+                if ($('#showArrows')[0]) {
+                    $('#showArrows')[0].checked = myVars.showArrows;
+                }
+                
+                if ($('#persistentHighlights')[0]) {
+                    $('#persistentHighlights')[0].checked = myVars.persistentHighlights;
+                }
+                
+                if ($('input[name="moveIndicatorType"]').length) {
+                    $('input[name="moveIndicatorType"][value="' + myVars.moveIndicatorType + '"]').prop('checked', true);
+                }
+                
+                if ($('#humanMode')[0] && myVars.humanMode) {
+                    $('#humanMode')[0].checked = myVars.humanMode.active;
+                }
+                
+                if ($('#humanLevelSelect')[0] && myVars.humanMode) {
+                    $('#humanLevelSelect')[0].value = myVars.humanMode.level;
+                }
+                
+                if ($('#fusionMode')[0]) {
+                    $('#fusionMode')[0].checked = myVars.fusionMode;
+                }
+                
+                if ($('#whiteAdvantageColor')[0]) {
+                    $('#whiteAdvantageColor')[0].value = myVars.whiteAdvantageColor;
+                }
+                
+                if ($('#blackAdvantageColor')[0]) {
+                    $('#blackAdvantageColor')[0].value = myVars.blackAdvantageColor;
+                }
+                
+                if (settings.timeDelayMin !== undefined && $('#timeDelayMin')[0]) {
+                    $('#timeDelayMin')[0].value = settings.timeDelayMin;
+                }
+                
+                if (settings.timeDelayMax !== undefined && $('#timeDelayMax')[0]) {
+                    $('#timeDelayMax')[0].value = settings.timeDelayMax;
+                }
+                
+                if (settings.evalBarTheme && $('#evalBarColor')[0]) {
+                    $('#evalBarColor').val(settings.evalBarTheme);
+                    if (settings.evalBarTheme === 'custom') {
+                        $('#customColorContainer').show();
+                    }
+                }
+            } else {
+                // Fallback to old method for backward compatibility
+                const savedDepth = await GM.getValue('depth', 11);
+                const savedElo = await GM.getValue('elo', 1500);
+                const savedAutoMove = await GM.getValue('autoMove', false);
+                const savedAutoRun = await GM.getValue('autoRun', false);
+                const savedShowArrows = await GM.getValue('showArrows', true);
+                const savedPersistentHighlights = await GM.getValue('persistentHighlights', true);
+                const savedMoveIndicatorType = await GM.getValue('moveIndicatorType', 'highlights');
+                const savedHumanMode = await GM.getValue('humanMode', false);
+                const savedHumanLevel = await GM.getValue('humanLevel', 'intermediate');
+                const savedFusionMode = await GM.getValue('fusionMode', false);
+                const savedWhiteAdvantageColor = await GM.getValue('whiteAdvantageColor', '#4CAF50');
+                const savedBlackAdvantageColor = await GM.getValue('blackAdvantageColor', '#F44336');
                 
                 // Apply saved settings
-            myVars.depth = savedDepth;
-            myVars.eloRating = savedElo;
-            myVars.autoMove = savedAutoMove;
-            myVars.autoRun = savedAutoRun;
-            myVars.showArrows = savedShowArrows;
-            myVars.persistentHighlights = savedPersistentHighlights;
-            myVars.moveIndicatorType = savedMoveIndicatorType;
-            myVars.humanMode = savedHumanMode;
-            myVars.humanLevel = savedHumanLevel;
-            myVars.fusionMode = savedFusionMode;
-            myVars.whiteAdvantageColor = savedWhiteAdvantageColor;
-            myVars.blackAdvantageColor = savedBlackAdvantageColor;
-            
-            // Update UI elements to match saved settings
-            if ($('#depthSlider')[0]) {
-                $('#depthSlider')[0].value = savedDepth;
-                $('#depthText').html('Current Depth: <strong>' + savedDepth + '</strong>');
+                myVars.depth = savedDepth;
+                myVars.eloRating = savedElo;
+                myVars.autoMove = savedAutoMove;
+                myVars.autoRun = savedAutoRun;
+                myVars.showArrows = savedShowArrows;
+                myVars.persistentHighlights = savedPersistentHighlights;
+                myVars.moveIndicatorType = savedMoveIndicatorType;
+                myVars.humanMode = { active: savedHumanMode, level: savedHumanLevel };
+                myVars.fusionMode = savedFusionMode;
+                myVars.whiteAdvantageColor = savedWhiteAdvantageColor;
+                myVars.blackAdvantageColor = savedBlackAdvantageColor;
+                
+                // Update UI elements to match saved settings
+                if ($('#depthSlider')[0]) {
+                    $('#depthSlider')[0].value = savedDepth;
+                    $('#depthText').html('Current Depth: <strong>' + savedDepth + '</strong>');
+                }
+                
+                if ($('#eloSlider')[0]) {
+                    $('#eloSlider')[0].value = savedElo;
+                    $('#eloText').html('Current ELO: <strong>' + savedElo + '</strong>');
+                }
+                
+                if ($('#autoMove')[0]) {
+                    $('#autoMove')[0].checked = savedAutoMove;
+                }
+                
+                if ($('#autoRun')[0]) {
+                    $('#autoRun')[0].checked = savedAutoRun;
+                }
+                
+                if ($('#showArrows')[0]) {
+                    $('#showArrows')[0].checked = savedShowArrows;
+                }
+                
+                if ($('#persistentHighlights')[0]) {
+                    $('#persistentHighlights')[0].checked = savedPersistentHighlights;
+                }
+                
+                if ($('input[name="moveIndicatorType"]').length) {
+                    $('input[name="moveIndicatorType"][value="' + savedMoveIndicatorType + '"]').prop('checked', true);
+                }
+                
+                if ($('#humanMode')[0]) {
+                    $('#humanMode')[0].checked = savedHumanMode;
+                }
+                
+                if ($('#humanLevelSelect')[0]) {
+                    $('#humanLevelSelect')[0].value = savedHumanLevel;
+                }
+                
+                if ($('#fusionMode')[0]) {
+                    $('#fusionMode')[0].checked = savedFusionMode;
+                }
+                
+                if ($('#whiteAdvantageColor')[0]) {
+                    $('#whiteAdvantageColor')[0].value = savedWhiteAdvantageColor;
+                }
+                
+                if ($('#blackAdvantageColor')[0]) {
+                    $('#blackAdvantageColor')[0].value = savedBlackAdvantageColor;
+                }
+                
+                // After loading the settings from individual values, save them as a combined object
+                // This will migrate users to the new format
+                myFunctions.saveSettings();
             }
             
-            if ($('#eloSlider')[0]) {
-                $('#eloSlider')[0].value = savedElo;
-                $('#eloText').html('Current ELO: <strong>' + savedElo + '</strong>');
-            }
-            
-            if ($('#autoMove')[0]) {
-                $('#autoMove')[0].checked = savedAutoMove;
-            }
-            
-            if ($('#autoRun')[0]) {
-                $('#autoRun')[0].checked = savedAutoRun;
-            }
-            
-            if ($('#showArrows')[0]) {
-                $('#showArrows')[0].checked = savedShowArrows;
-            }
-            
-            if ($('#persistentHighlights')[0]) {
-                $('#persistentHighlights')[0].checked = savedPersistentHighlights;
-            }
-            
-            if ($('input[name="moveIndicatorType"]').length) {
-                $('input[name="moveIndicatorType"][value="' + savedMoveIndicatorType + '"]').prop('checked', true);
-            }
-            
-            if ($('#humanMode')[0]) {
-                $('#humanMode')[0].checked = savedHumanMode;
-            }
-            
-            if ($('#humanLevelSelect')[0]) {
-                $('#humanLevelSelect')[0].value = savedHumanLevel;
-            }
-            
-            if ($('#fusionMode')[0]) {
-                $('#fusionMode')[0].checked = savedFusionMode;
-            }
-            
-            if ($('#whiteAdvantageColor')[0]) {
-                $('#whiteAdvantageColor')[0].value = savedWhiteAdvantageColor;
-            }
-            
-            if ($('#blackAdvantageColor')[0]) {
-                $('#blackAdvantageColor')[0].value = savedBlackAdvantageColor;
-            }
+            // Check for first run (always use individual setting for this)
+            const savedFirstRun = await GM.getValue('firstRun', true);
             
             // Show welcome modal for first-time users
             if (savedFirstRun) {
