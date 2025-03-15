@@ -570,6 +570,67 @@ function main() {
             const sign = evalValue > 0 ? '+' : '';
             evalText.textContent = `${sign}${evalValue.toFixed(2)}` + (depth ? ` (d${depth})` : '');
         }
+        
+        // Add visual indicators for advantage
+        const advantageIndicator = document.getElementById('advantage-indicator');
+        if (!advantageIndicator) {
+            const indicator = document.createElement('div');
+            indicator.id = 'advantage-indicator';
+            indicator.style = `
+                position: absolute;
+                right: 0;
+                width: 100%;
+                text-align: center;
+                font-size: 12px;
+                font-weight: bold;
+                text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+                pointer-events: none;
+            `;
+            evalBar.parentElement.appendChild(indicator);
+        }
+        
+        const indicator = document.getElementById('advantage-indicator');
+        
+        // Clear any existing labels
+        while (indicator.firstChild) {
+            indicator.removeChild(indicator.firstChild);
+        }
+        
+        // Add advantage labels
+        const addLabel = (position, text, color) => {
+            const label = document.createElement('div');
+            label.textContent = text;
+            label.style = `
+                position: absolute;
+                top: ${position}%;
+                width: 100%;
+                color: ${color};
+                transform: translateY(-50%);
+            `;
+            indicator.appendChild(label);
+        };
+        
+        // Add labels for different advantage levels
+        addLabel(0, "Black ++", myVars.blackAdvantageColor || '#F44336');
+        addLabel(25, "Black +", myVars.blackAdvantageColor || '#F44336');
+        addLabel(50, "Equal", '#9E9E9E');
+        addLabel(75, "White +", myVars.whiteAdvantageColor || '#4CAF50');
+        addLabel(100, "White ++", myVars.whiteAdvantageColor || '#4CAF50');
+        
+        // Add a marker for current evaluation
+        const marker = document.createElement('div');
+        marker.style = `
+            position: absolute;
+            top: ${percentage}%;
+            left: -15px;
+            width: 0;
+            height: 0;
+            border-top: 6px solid transparent;
+            border-bottom: 6px solid transparent;
+            border-left: 10px solid #FFC107;
+            transform: translateY(-50%);
+        `;
+        indicator.appendChild(marker);
     }
 
     myFunctions.reloadChessEngine = function() {
@@ -1182,7 +1243,7 @@ function main() {
 
             // Create main container with header
             var div = document.createElement('div');
-            div.setAttribute('style','background-color:white; height:auto; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); padding: 0; max-width: 300px; position: relative;');
+            div.setAttribute('style','background-color:white; height:auto; border-radius: 12px; box-shadow: 0 6px 16px rgba(0,0,0,0.15); padding: 0; max-width: 300px; position: relative; font-family: "Segoe UI", Arial, sans-serif;');
             div.setAttribute('id','settingsContainer');
             
             // Create header with collapse button
@@ -1190,24 +1251,26 @@ function main() {
             header.style = `
                 background-color: #2196F3;
                 color: white;
-                padding: 10px;
-                border-top-left-radius: 8px;
-                border-top-right-radius: 8px;
+                padding: 12px 15px;
+                border-top-left-radius: 12px;
+                border-top-right-radius: 12px;
                 cursor: pointer;
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
+                font-weight: 600;
+                letter-spacing: 0.3px;
             `;
             header.innerHTML = `
-                <span style="font-weight: bold;">Chess AI Controls</span>
-                <span id="collapseBtn">▼</span>
+                <span style="font-weight: bold; font-size: 15px;">Chess AI Controls</span>
+                <span id="collapseBtn" style="transition: transform 0.3s;">▼</span>
             `;
             div.appendChild(header);
             
             // Create content container
             var contentContainer = document.createElement('div');
             contentContainer.id = 'aiControlsContent';
-            contentContainer.style = 'padding: 15px; font-family: Arial, sans-serif;';
+            contentContainer.style = 'padding: 15px; font-family: "Segoe UI", Arial, sans-serif; font-size: 14px;';
             
             // Add CSS for tabs
             var tabStyle = document.createElement('style');
@@ -1219,27 +1282,48 @@ function main() {
                     display: flex;
                     border-bottom: 2px solid #2196F3;
                     margin-bottom: 15px;
-                    overflow-x: auto; /* Allow scrolling if too many tabs */
+                    overflow-x: hidden; /* Prevent scrolling */
+                    flex-wrap: nowrap; /* Keep tabs in a single row */
+                    justify-content: space-between; /* Distribute space evenly */
                 }
                 .tab-button {
-                    padding: 8px 12px;
-                    background-color: #f1f1f1;
+                    padding: 8px 5px; /* Reduce padding to fit all tabs */
+                    background-color: #f8f8f8;
                     border: none;
                     border-radius: 8px 8px 0 0;
-                    margin-right: 2px;
+                    margin-right: 1px; /* Reduce margin between tabs */
                     cursor: pointer;
-                    transition: all 0.2s;
+                    transition: all 0.3s;
                     font-weight: bold;
                     color: #666;
                     flex: 1;
                     text-align: center;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    box-shadow: 0 -2px 5px rgba(0,0,0,0.05);
+                    font-size: 12px; /* Reduce font size to fit better */
                 }
                 .tab-button:hover {
-                    background-color: #e0e0e0;
+                    background-color: #e9f5ff;
+                    color: #2196F3;
+                    transform: translateY(-2px);
                 }
                 .tab-button.active {
                     background-color: #2196F3;
                     color: white;
+                    box-shadow: 0 -2px 5px rgba(33,150,243,0.3);
+                    transform: translateY(-3px);
+                    position: relative;
+                }
+                .tab-button.active::after {
+                    content: '';
+                    position: absolute;
+                    bottom: -2px;
+                    left: 0;
+                    width: 100%;
+                    height: 2px;
+                    background-color: #2196F3;
                 }
                 .tab-content {
                     display: none;
@@ -1284,7 +1368,8 @@ function main() {
                     right: 0;
                     bottom: 0;
                     background-color: #ccc;
-                    transition: .4s;
+                    transition: .3s;
+                    border-radius: 24px;
                 }
                 
                 .slider:before {
@@ -1295,7 +1380,9 @@ function main() {
                     left: 3px;
                     bottom: 3px;
                     background-color: white;
-                    transition: .4s;
+                    transition: .3s;
+                    border-radius: 50%;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
                 }
                 
                 input:checked + .slider {
@@ -1303,19 +1390,70 @@ function main() {
                 }
                 
                 input:focus + .slider {
-                    box-shadow: 0 0 1px #2196F3;
+                    box-shadow: 0 0 2px #2196F3;
                 }
                 
                 input:checked + .slider:before {
                     transform: translateX(22px);
                 }
                 
-                .slider.round {
-                    border-radius: 24px;
+                /* Button styles */
+                button {
+                    transition: all 0.2s ease;
                 }
                 
-                .slider.round:before {
+                button:hover {
+                    transform: translateY(-2px);
+                    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+                }
+                
+                button:active {
+                    transform: translateY(0);
+                }
+                
+                /* Input styles */
+                input[type="range"] {
+                    -webkit-appearance: none;
+                    height: 8px;
+                    border-radius: 4px;
+                    background: #e0e0e0;
+                    outline: none;
+                }
+                
+                input[type="range"]::-webkit-slider-thumb {
+                    -webkit-appearance: none;
+                    appearance: none;
+                    width: 18px;
+                    height: 18px;
                     border-radius: 50%;
+                    background: #2196F3;
+                    cursor: pointer;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                }
+                
+                input[type="range"]::-moz-range-thumb {
+                    width: 18px;
+                    height: 18px;
+                    border-radius: 50%;
+                    background: #2196F3;
+                    cursor: pointer;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                }
+                
+                /* Select styles */
+                select {
+                    appearance: none;
+                    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23333' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+                    background-repeat: no-repeat;
+                    background-position: right 10px center;
+                    background-size: 12px;
+                    padding-right: 30px !important;
+                    transition: all 0.2s;
+                }
+                
+                select:focus {
+                    border-color: #2196F3;
+                    box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
                 }
                 
                 /* Tooltip styles */
@@ -1344,11 +1482,42 @@ function main() {
             <!-- Tab Navigation -->
             <div class="tab-container">
                 <div class="tab-nav">
-                    <button class="tab-button active" data-tab="engine">Engine</button>
-                    <button class="tab-button" data-tab="playstyle">Play Style</button>
-                    <button class="tab-button" data-tab="visual">Visual</button>
-                    <button class="tab-button" data-tab="auto">Auto</button>
-                    <button class="tab-button" data-tab="actions">Actions</button>
+                    <button class="tab-button active" data-tab="engine">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 3px;">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="8" x2="12" y2="12"></line>
+                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                        </svg>
+                        Engine
+                    </button>
+                    <button class="tab-button" data-tab="actions">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 3px;">
+                            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                        </svg>
+                        Actions
+                    </button>
+                    <button class="tab-button" data-tab="visual">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 3px;">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                            <circle cx="12" cy="12" r="3"></circle>
+                        </svg>
+                        Visual
+                    </button>
+                    <button class="tab-button" data-tab="playstyle">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 3px;">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="12" cy="7" r="4"></circle>
+                        </svg>
+                        Play
+                    </button>
+                    <button class="tab-button" data-tab="auto">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 3px;">
+                            <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                            <path d="M2 17l10 5 10-5"></path>
+                            <path d="M2 12l10 5 10-5"></path>
+                        </svg>
+                        Auto
+                    </button>
                 </div>
                 
                 <!-- Engine Tab -->
@@ -1360,9 +1529,9 @@ function main() {
                                 <label for="depthSlider" style="display: block; margin-bottom: 5px;">Adjust Depth (1-30):</label>
                 <input type="range" id="depthSlider" name="depthSlider" min="1" max="30" step="1" value="11" 
                                     oninput="document.getElementById('depthText').innerHTML = 'Current Depth: <strong>' + this.value + '</strong>';" 
-                                    style="width: 100%;">
+                                    style="width: 100%;" title="Higher depth = stronger analysis but slower calculation">
                             </div>
-                            <button id="applyDepth" style="margin-left: 10px; padding: 5px 10px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">Apply</button>
+                            <button id="applyDepth" style="margin-left: 10px; padding: 5px 10px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; box-shadow: 0 2px 4px rgba(76, 175, 80, 0.2);" title="Apply the selected depth to the engine">Apply</button>
                         </div>
             </div>
             
@@ -1388,7 +1557,7 @@ function main() {
                                 <label for="fusionModeToggle" style="margin-right: 10px; font-weight: bold;">Fusion Mode:</label>
                     <label class="switch">
                         <input type="checkbox" id="fusionMode" name="fusionMode" value="false">
-                        <span class="slider round"></span>
+                        <span class="slider"></span>
                     </label>
                     <span id="fusionModeStatus" style="margin-left: 10px; font-size: 12px; color: #666;">Off</span>
                 </div>
@@ -1403,7 +1572,7 @@ function main() {
                                 <label for="humanModeToggle" style="margin-right: 10px; font-weight: bold;">Human Mode:</label>
                     <label class="switch">
                         <input type="checkbox" id="humanMode" name="humanMode" value="false">
-                        <span class="slider round"></span>
+                        <span class="slider"></span>
                     </label>
                     <span id="humanModeStatus" style="margin-left: 10px; font-size: 12px; color: #666;">Off</span>
                 </div>
@@ -1478,36 +1647,58 @@ function main() {
                 
                 <!-- Automation Tab -->
                 <div id="auto-tab" class="tab-content">
-                    <div style="margin-bottom: 15px;">
+                    <div style="margin-bottom: 20px; border-left: 3px solid #FF9800; padding-left: 12px;">
                         <div style="display: flex; align-items: center; margin-bottom: 10px;">
-                            <label for="autoRunToggle" style="margin-right: 10px; font-weight: bold;">Auto Run:</label>
-                    <label class="switch">
-                        <input type="checkbox" id="autoRun" name="autoRun" value="false">
-                        <span class="slider round"></span>
-                    </label>
-                    <span id="autoRunStatus" style="margin-left: 10px; font-size: 12px; color: #666;">Off</span>
-                </div>
-                
-                        <div style="display: flex; align-items: center; margin-bottom: 10px;">
-                            <input type="checkbox" id="autoMove" name="autoMove" value="false" style="margin-right: 8px;">
-                            <label for="autoMove"> Enable auto move</label>
-            </div>
-            
-                        <div style="margin-top: 10px;">
-                            <label for="timeDelayMin" style="display: block; margin-bottom: 5px;">Auto Run Delay (Seconds):</label>
-                            <div style="display: flex; align-items: center; gap: 10px;">
-                                <input type="number" id="timeDelayMin" name="timeDelayMin" min="0.1" value="0.1" style="width: 70px; padding: 5px; border-radius: 4px; border: 1px solid #ddd;">
-                                <span>to</span>
-                                <input type="number" id="timeDelayMax" name="timeDelayMax" min="0.1" value="1" style="width: 70px; padding: 5px; border-radius: 4px; border: 1px solid #ddd;">
-            </div>
+                            <label for="autoRunToggle" style="margin-right: 10px; font-weight: bold; color: #FF9800;">Auto Run:</label>
+                            <label class="switch">
+                                <input type="checkbox" id="autoRun" name="autoRun" value="false">
+                                <span class="slider" style="background-color: #ccc;"></span>
+                            </label>
+                            <span id="autoRunStatus" style="margin-left: 10px; font-size: 12px; color: #666;">Off</span>
+                        </div>
+                        <div style="font-size: 12px; color: #666; margin-bottom: 10px;">
+                            Automatically runs the engine when it's your turn
                         </div>
                     </div>
+                
+                    <div style="margin-bottom: 20px; border-left: 3px solid #4CAF50; padding-left: 12px;">
+                        <div style="display: flex; align-items: center; margin-bottom: 10px;">
+                            <label for="autoMove" style="margin-right: 10px; font-weight: bold; color: #4CAF50;">Auto Move:</label>
+                            <label class="switch">
+                                <input type="checkbox" id="autoMove" name="autoMove" value="false">
+                                <span class="slider" style="background-color: #ccc;"></span>
+                            </label>
+                            <span id="autoMoveStatus" style="margin-left: 10px; font-size: 12px; color: #666;">Off</span>
+                        </div>
+                        <div style="font-size: 12px; color: #666; margin-bottom: 10px;">
+                            Automatically plays the best move for you
+                        </div>
+                    </div>
+            
+                    <div style="margin-top: 15px; background-color: #f8f8f8; padding: 12px; border-radius: 6px;">
+                        <label style="display: block; margin-bottom: 10px; font-weight: bold;">Auto Run Delay (Seconds):</label>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <div style="flex: 1;">
+                                <label for="timeDelayMin" style="display: block; font-size: 12px; margin-bottom: 3px;">Minimum:</label>
+                                <input type="number" id="timeDelayMin" name="timeDelayMin" min="0.1" value="0.1" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ddd;">
+                            </div>
+                            <span style="color: #666;">to</span>
+                            <div style="flex: 1;">
+                                <label for="timeDelayMax" style="display: block; font-size: 12px; margin-bottom: 3px;">Maximum:</label>
+                                <input type="number" id="timeDelayMax" name="timeDelayMax" min="0.1" value="1" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ddd;">
+                            </div>
+                        </div>
+                        <div style="font-size: 12px; color: #666; margin-top: 8px; font-style: italic;">
+                            Random delay between min and max to simulate human thinking time
+                        </div>
+                    </div>
+                </div>
             </div>
             
                 <!-- Actions Tab -->
                 <div id="actions-tab" class="tab-content">
                     <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-                        <button id="runEngineBtn" style="flex: 1; padding: 10px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">
+                        <button id="runEngineBtn" style="flex: 1; padding: 10px; background-color: #4CAF50; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; box-shadow: 0 2px 5px rgba(76, 175, 80, 0.3);">
                             <span style="display: flex; align-items: center; justify-content: center;">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 5px;">
                                     <polygon points="5 3 19 12 5 21 5 3"></polygon>
@@ -1515,7 +1706,7 @@ function main() {
                                 Run Engine
                             </span>
                         </button>
-                        <button id="stopEngineBtn" style="flex: 1; padding: 10px; background-color: #F44336; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">
+                        <button id="stopEngineBtn" style="flex: 1; padding: 10px; background-color: #F44336; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; box-shadow: 0 2px 5px rgba(244, 67, 54, 0.3);">
                             <span style="display: flex; align-items: center; justify-content: center;">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 5px;">
                                     <rect x="6" y="6" width="12" height="12"></rect>
@@ -1523,9 +1714,9 @@ function main() {
                                 Stop Engine
                             </span>
                         </button>
-            </div>
+                    </div>
             
-                    <button id="saveSettingsBtn" style="width: 100%; padding: 10px; background-color: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; margin-bottom: 10px;">
+                    <button id="saveSettingsBtn" style="width: 100%; padding: 10px; background-color: #2196F3; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; margin-bottom: 10px; box-shadow: 0 2px 5px rgba(33, 150, 243, 0.3);">
                         <span style="display: flex; align-items: center; justify-content: center;">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 5px;">
                                 <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
@@ -1536,7 +1727,7 @@ function main() {
                         </span>
                     </button>
                     
-                    <button id="showKeyboardShortcuts" style="width: 100%; padding: 10px; background-color: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">
+                    <button id="showKeyboardShortcuts" style="width: 100%; padding: 10px; background-color: #9C27B0; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; box-shadow: 0 2px 5px rgba(156, 39, 176, 0.3);">
                         <span style="display: flex; align-items: center; justify-content: center;">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 5px;">
                                 <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect>
@@ -1619,9 +1810,69 @@ function main() {
             
             // Add a brief description
             var shortcutsDescription = document.createElement('p');
-            shortcutsDescription.textContent = 'Press any of these keys to quickly run the engine at different depths.';
+            shortcutsDescription.textContent = 'Press any of these keys to quickly run the engine at different depths. Keys are organized by strength level.';
             shortcutsDescription.style = 'margin-bottom: 20px; color: #666;';
             modalContent.appendChild(shortcutsDescription);
+            
+            // Add visual keyboard layout
+            var keyboardLayout = document.createElement('div');
+            keyboardLayout.style = `
+                background-color: #f5f5f5;
+                border-radius: 8px;
+                padding: 15px;
+                margin-bottom: 20px;
+                text-align: center;
+                font-family: monospace;
+            `;
+            
+            keyboardLayout.innerHTML = `
+                <div style="margin-bottom: 10px; font-weight: bold; color: #666;">Visual Keyboard Guide</div>
+                <div style="display: flex; justify-content: center; margin-bottom: 8px;">
+                    <div style="width: 40px; height: 40px; background-color: #e0e0e0; border: 1px solid #ccc; border-radius: 4px; display: flex; justify-content: center; align-items: center; margin: 0 2px; position: relative;">Q<span style="position: absolute; bottom: 2px; right: 2px; font-size: 8px; color: #F44336;">1</span></div>
+                    <div style="width: 40px; height: 40px; background-color: #e0e0e0; border: 1px solid #ccc; border-radius: 4px; display: flex; justify-content: center; align-items: center; margin: 0 2px; position: relative;">W<span style="position: absolute; bottom: 2px; right: 2px; font-size: 8px; color: #F44336;">2</span></div>
+                    <div style="width: 40px; height: 40px; background-color: #e0e0e0; border: 1px solid #ccc; border-radius: 4px; display: flex; justify-content: center; align-items: center; margin: 0 2px; position: relative;">E<span style="position: absolute; bottom: 2px; right: 2px; font-size: 8px; color: #F44336;">3</span></div>
+                    <div style="width: 40px; height: 40px; background-color: #e0e0e0; border: 1px solid #ccc; border-radius: 4px; display: flex; justify-content: center; align-items: center; margin: 0 2px; position: relative;">R<span style="position: absolute; bottom: 2px; right: 2px; font-size: 8px; color: #FF9800;">4</span></div>
+                    <div style="width: 40px; height: 40px; background-color: #e0e0e0; border: 1px solid #ccc; border-radius: 4px; display: flex; justify-content: center; align-items: center; margin: 0 2px; position: relative;">T<span style="position: absolute; bottom: 2px; right: 2px; font-size: 8px; color: #FF9800;">5</span></div>
+                    <div style="width: 40px; height: 40px; background-color: #e0e0e0; border: 1px solid #ccc; border-radius: 4px; display: flex; justify-content: center; align-items: center; margin: 0 2px; position: relative;">Y<span style="position: absolute; bottom: 2px; right: 2px; font-size: 8px; color: #FF9800;">6</span></div>
+                    <div style="width: 40px; height: 40px; background-color: #e0e0e0; border: 1px solid #ccc; border-radius: 4px; display: flex; justify-content: center; align-items: center; margin: 0 2px; position: relative;">U<span style="position: absolute; bottom: 2px; right: 2px; font-size: 8px; color: #FF9800;">7</span></div>
+                    <div style="width: 40px; height: 40px; background-color: #e0e0e0; border: 1px solid #ccc; border-radius: 4px; display: flex; justify-content: center; align-items: center; margin: 0 2px; position: relative;">I<span style="position: absolute; bottom: 2px; right: 2px; font-size: 8px; color: #FF9800;">8</span></div>
+                    <div style="width: 40px; height: 40px; background-color: #e0e0e0; border: 1px solid #ccc; border-radius: 4px; display: flex; justify-content: center; align-items: center; margin: 0 2px; position: relative;">O<span style="position: absolute; bottom: 2px; right: 2px; font-size: 8px; color: #FF9800;">9</span></div>
+                    <div style="width: 40px; height: 40px; background-color: #e0e0e0; border: 1px solid #ccc; border-radius: 4px; display: flex; justify-content: center; align-items: center; margin: 0 2px; position: relative;">P<span style="position: absolute; bottom: 2px; right: 2px; font-size: 8px; color: #4CAF50;">10</span></div>
+                </div>
+                <div style="display: flex; justify-content: center; margin-bottom: 8px; margin-left: 20px;">
+                    <div style="width: 40px; height: 40px; background-color: #e0e0e0; border: 1px solid #ccc; border-radius: 4px; display: flex; justify-content: center; align-items: center; margin: 0 2px; position: relative;">A<span style="position: absolute; bottom: 2px; right: 2px; font-size: 8px; color: #4CAF50;">11</span></div>
+                    <div style="width: 40px; height: 40px; background-color: #e0e0e0; border: 1px solid #ccc; border-radius: 4px; display: flex; justify-content: center; align-items: center; margin: 0 2px; position: relative;">S<span style="position: absolute; bottom: 2px; right: 2px; font-size: 8px; color: #4CAF50;">12</span></div>
+                    <div style="width: 40px; height: 40px; background-color: #e0e0e0; border: 1px solid #ccc; border-radius: 4px; display: flex; justify-content: center; align-items: center; margin: 0 2px; position: relative;">D<span style="position: absolute; bottom: 2px; right: 2px; font-size: 8px; color: #4CAF50;">13</span></div>
+                    <div style="width: 40px; height: 40px; background-color: #e0e0e0; border: 1px solid #ccc; border-radius: 4px; display: flex; justify-content: center; align-items: center; margin: 0 2px; position: relative;">F<span style="position: absolute; bottom: 2px; right: 2px; font-size: 8px; color: #4CAF50;">14</span></div>
+                    <div style="width: 40px; height: 40px; background-color: #e0e0e0; border: 1px solid #ccc; border-radius: 4px; display: flex; justify-content: center; align-items: center; margin: 0 2px; position: relative;">G<span style="position: absolute; bottom: 2px; right: 2px; font-size: 8px; color: #4CAF50;">15</span></div>
+                    <div style="width: 40px; height: 40px; background-color: #e0e0e0; border: 1px solid #ccc; border-radius: 4px; display: flex; justify-content: center; align-items: center; margin: 0 2px; position: relative;">H<span style="position: absolute; bottom: 2px; right: 2px; font-size: 8px; color: #2196F3;">16</span></div>
+                    <div style="width: 40px; height: 40px; background-color: #e0e0e0; border: 1px solid #ccc; border-radius: 4px; display: flex; justify-content: center; align-items: center; margin: 0 2px; position: relative;">J<span style="position: absolute; bottom: 2px; right: 2px; font-size: 8px; color: #2196F3;">17</span></div>
+                    <div style="width: 40px; height: 40px; background-color: #e0e0e0; border: 1px solid #ccc; border-radius: 4px; display: flex; justify-content: center; align-items: center; margin: 0 2px; position: relative;">K<span style="position: absolute; bottom: 2px; right: 2px; font-size: 8px; color: #2196F3;">18</span></div>
+                    <div style="width: 40px; height: 40px; background-color: #e0e0e0; border: 1px solid #ccc; border-radius: 4px; display: flex; justify-content: center; align-items: center; margin: 0 2px; position: relative;">L<span style="position: absolute; bottom: 2px; right: 2px; font-size: 8px; color: #2196F3;">19</span></div>
+                </div>
+                <div style="display: flex; justify-content: center; margin-left: 40px;">
+                    <div style="width: 40px; height: 40px; background-color: #e0e0e0; border: 1px solid #ccc; border-radius: 4px; display: flex; justify-content: center; align-items: center; margin: 0 2px; position: relative;">Z<span style="position: absolute; bottom: 2px; right: 2px; font-size: 8px; color: #9C27B0;">20</span></div>
+                    <div style="width: 40px; height: 40px; background-color: #e0e0e0; border: 1px solid #ccc; border-radius: 4px; display: flex; justify-content: center; align-items: center; margin: 0 2px; position: relative;">X<span style="position: absolute; bottom: 2px; right: 2px; font-size: 8px; color: #9C27B0;">21</span></div>
+                    <div style="width: 40px; height: 40px; background-color: #e0e0e0; border: 1px solid #ccc; border-radius: 4px; display: flex; justify-content: center; align-items: center; margin: 0 2px; position: relative;">C<span style="position: absolute; bottom: 2px; right: 2px; font-size: 8px; color: #9C27B0;">22</span></div>
+                    <div style="width: 40px; height: 40px; background-color: #e0e0e0; border: 1px solid #ccc; border-radius: 4px; display: flex; justify-content: center; align-items: center; margin: 0 2px; position: relative;">V<span style="position: absolute; bottom: 2px; right: 2px; font-size: 8px; color: #9C27B0;">23</span></div>
+                    <div style="width: 40px; height: 40px; background-color: #e0e0e0; border: 1px solid #ccc; border-radius: 4px; display: flex; justify-content: center; align-items: center; margin: 0 2px; position: relative;">B<span style="position: absolute; bottom: 2px; right: 2px; font-size: 8px; color: #9C27B0;">24</span></div>
+                    <div style="width: 40px; height: 40px; background-color: #e0e0e0; border: 1px solid #ccc; border-radius: 4px; display: flex; justify-content: center; align-items: center; margin: 0 2px; position: relative;">N<span style="position: absolute; bottom: 2px; right: 2px; font-size: 8px; color: #9C27B0;">25</span></div>
+                    <div style="width: 40px; height: 40px; background-color: #e0e0e0; border: 1px solid #ccc; border-radius: 4px; display: flex; justify-content: center; align-items: center; margin: 0 2px; position: relative;">M<span style="position: absolute; bottom: 2px; right: 2px; font-size: 8px; color: #9C27B0;">26</span></div>
+                </div>
+                <div style="margin-top: 15px; display: flex; justify-content: center;">
+                    <div style="width: 80px; height: 40px; background-color: #e0e0e0; border: 1px solid #ccc; border-radius: 4px; display: flex; justify-content: center; align-items: center; margin: 0 2px; position: relative;">=<span style="position: absolute; bottom: 2px; right: 2px; font-size: 8px; color: #E91E63;">MAX</span></div>
+                </div>
+                <div style="margin-top: 15px; font-size: 12px;">
+                    <span style="color: #F44336;">■</span> Beginner &nbsp;
+                    <span style="color: #FF9800;">■</span> Intermediate &nbsp;
+                    <span style="color: #4CAF50;">■</span> Advanced &nbsp;
+                    <span style="color: #2196F3;">■</span> Expert &nbsp;
+                    <span style="color: #9C27B0;">■</span> Master &nbsp;
+                    <span style="color: #E91E63;">■</span> Maximum
+                </div>
+            `;
+            
+            modalContent.appendChild(keyboardLayout);
             
             var shortcutsTable = document.createElement('table');
             shortcutsTable.style = 'width: 100%; border-collapse: collapse;';
@@ -1632,6 +1883,7 @@ function main() {
                 <tr style="background-color: #f5f5f5;">
                     <th style="text-align: left; padding: 12px; border-bottom: 2px solid #ddd; width: 20%;">Key</th>
                     <th style="text-align: left; padding: 12px; border-bottom: 2px solid #ddd;">Function</th>
+                    <th style="text-align: left; padding: 12px; border-bottom: 2px solid #ddd;">Strength</th>
                 </tr>
             `;
             shortcutsTable.appendChild(tableHeader);
@@ -1639,68 +1891,61 @@ function main() {
             // Create table body with all keyboard shortcuts
             var tableBody = document.createElement('tbody');
             
-            // Define all shortcuts
+            // Define all shortcuts with strength categories
             const shortcuts = [
-                { key: 'Q', function: 'Run engine at depth 1' },
-                { key: 'W', function: 'Run engine at depth 2' },
-                { key: 'E', function: 'Run engine at depth 3' },
-                { key: 'R', function: 'Run engine at depth 4' },
-                { key: 'T', function: 'Run engine at depth 5' },
-                { key: 'Y', function: 'Run engine at depth 6' },
-                { key: 'U', function: 'Run engine at depth 7' },
-                { key: 'I', function: 'Run engine at depth 8' },
-                { key: 'O', function: 'Run engine at depth 9' },
-                { key: 'P', function: 'Run engine at depth 10' },
-                { key: 'A', function: 'Run engine at depth 11' },
-                { key: 'S', function: 'Run engine at depth 12' },
-                { key: 'D', function: 'Run engine at depth 13' },
-                { key: 'F', function: 'Run engine at depth 14' },
-                { key: 'G', function: 'Run engine at depth 15' },
-                { key: 'H', function: 'Run engine at depth 16' },
-                { key: 'J', function: 'Run engine at depth 17' },
-                { key: 'K', function: 'Run engine at depth 18' },
-                { key: 'L', function: 'Run engine at depth 19' },
-                { key: 'Z', function: 'Run engine at depth 20' },
-                { key: 'X', function: 'Run engine at depth 21' },
-                { key: 'C', function: 'Run engine at depth 22' },
-                { key: 'V', function: 'Run engine at depth 23' },
-                { key: 'B', function: 'Run engine at depth 24' },
-                { key: 'N', function: 'Run engine at depth 25' },
-                { key: 'M', function: 'Run engine at depth 26' },
-                { key: '=', function: 'Run engine at depth 100 (maximum)' }
+                { key: 'Q', function: 'Run engine at depth 1', strength: 'Beginner' },
+                { key: 'W', function: 'Run engine at depth 2', strength: 'Beginner' },
+                { key: 'E', function: 'Run engine at depth 3', strength: 'Beginner' },
+                { key: 'R', function: 'Run engine at depth 4', strength: 'Intermediate' },
+                { key: 'T', function: 'Run engine at depth 5', strength: 'Intermediate' },
+                { key: 'Y', function: 'Run engine at depth 6', strength: 'Intermediate' },
+                { key: 'U', function: 'Run engine at depth 7', strength: 'Intermediate' },
+                { key: 'I', function: 'Run engine at depth 8', strength: 'Intermediate' },
+                { key: 'O', function: 'Run engine at depth 9', strength: 'Intermediate' },
+                { key: 'P', function: 'Run engine at depth 10', strength: 'Advanced' },
+                { key: 'A', function: 'Run engine at depth 11', strength: 'Advanced' },
+                { key: 'S', function: 'Run engine at depth 12', strength: 'Advanced' },
+                { key: 'D', function: 'Run engine at depth 13', strength: 'Advanced' },
+                { key: 'F', function: 'Run engine at depth 14', strength: 'Advanced' },
+                { key: 'G', function: 'Run engine at depth 15', strength: 'Advanced' },
+                { key: 'H', function: 'Run engine at depth 16', strength: 'Expert' },
+                { key: 'J', function: 'Run engine at depth 17', strength: 'Expert' },
+                { key: 'K', function: 'Run engine at depth 18', strength: 'Expert' },
+                { key: 'L', function: 'Run engine at depth 19', strength: 'Expert' },
+                { key: 'Z', function: 'Run engine at depth 20', strength: 'Master' },
+                { key: 'X', function: 'Run engine at depth 21', strength: 'Master' },
+                { key: 'C', function: 'Run engine at depth 22', strength: 'Master' },
+                { key: 'V', function: 'Run engine at depth 23', strength: 'Master' },
+                { key: 'B', function: 'Run engine at depth 24', strength: 'Master' },
+                { key: 'N', function: 'Run engine at depth 25', strength: 'Master' },
+                { key: 'M', function: 'Run engine at depth 26', strength: 'Master' },
+                { key: '=', function: 'Run engine at maximum depth', strength: 'Maximum' }
             ];
             
-            // Group shortcuts by rows of 3 for better readability
-            const shortcutGroups = [];
-            for (let i = 0; i < shortcuts.length; i += 3) {
-                shortcutGroups.push(shortcuts.slice(i, i + 3));
-            }
-            
-            // Add rows for each shortcut group
-            shortcutGroups.forEach((group, index) => {
+            // Add rows for each shortcut
+            shortcuts.forEach((shortcut, index) => {
                 const row = document.createElement('tr');
                 row.style = index % 2 === 0 ? '' : 'background-color: #f9f9f9;';
                 
-                let rowHTML = '';
-                group.forEach(shortcut => {
-                    rowHTML += `
+                // Set color based on strength
+                let strengthColor = '#333';
+                switch(shortcut.strength) {
+                    case 'Beginner': strengthColor = '#F44336'; break;
+                    case 'Intermediate': strengthColor = '#FF9800'; break;
+                    case 'Advanced': strengthColor = '#4CAF50'; break;
+                    case 'Expert': strengthColor = '#2196F3'; break;
+                    case 'Master': strengthColor = '#9C27B0'; break;
+                    case 'Maximum': strengthColor = '#E91E63'; break;
+                }
+                
+                row.innerHTML = `
                         <td style="padding: 10px; border-bottom: 1px solid #eee;">
                             <kbd style="background-color: #f1f1f1; border: 1px solid #ccc; border-radius: 4px; padding: 2px 6px; font-family: monospace;">${shortcut.key}</kbd>
                         </td>
                         <td style="padding: 10px; border-bottom: 1px solid #eee;">${shortcut.function}</td>
-                    `;
-                });
+                    <td style="padding: 10px; border-bottom: 1px solid #eee; color: ${strengthColor};">${shortcut.strength}</td>
+                `;
                 
-                // Fill empty cells if needed
-                const emptyCellsNeeded = 3 - group.length;
-                for (let i = 0; i < emptyCellsNeeded; i++) {
-                    rowHTML += `
-                        <td style="padding: 10px; border-bottom: 1px solid #eee;"></td>
-                        <td style="padding: 10px; border-bottom: 1px solid #eee;"></td>
-                    `;
-                }
-                
-                row.innerHTML = rowHTML;
                 tableBody.appendChild(row);
             });
             
@@ -1709,7 +1954,7 @@ function main() {
             
             // Add a note at the bottom
             var shortcutsNote = document.createElement('p');
-            shortcutsNote.innerHTML = '<strong>Note:</strong> Higher depths provide stronger analysis but take longer to calculate.';
+            shortcutsNote.innerHTML = '<strong>Note:</strong> Higher depths provide stronger analysis but take longer to calculate. For casual play, depths 1-10 are usually sufficient. For serious analysis, try depths 15+.';
             shortcutsNote.style = 'margin-top: 20px; color: #666; font-size: 13px; background-color: #f5f5f5; padding: 10px; border-radius: 4px;';
             modalContent.appendChild(shortcutsNote);
             
@@ -1719,6 +1964,53 @@ function main() {
             // Add JavaScript for tab switching
             setTimeout(function() {
                 const tabButtons = document.querySelectorAll('.tab-button');
+                const collapseBtn = document.getElementById('collapseBtn');
+                const aiControlsContent = document.getElementById('aiControlsContent');
+                const header = document.querySelector('#settingsContainer > div:first-child');
+                
+                // Function to toggle content visibility
+                const toggleContent = () => {
+                    if (aiControlsContent.style.display === 'none') {
+                        aiControlsContent.style.display = 'block';
+                        collapseBtn.style.transform = 'rotate(0deg)';
+                    } else {
+                        aiControlsContent.style.display = 'none';
+                        collapseBtn.style.transform = 'rotate(180deg)';
+                    }
+                };
+                
+                // Add collapse functionality to button
+                if (collapseBtn && aiControlsContent) {
+                    collapseBtn.addEventListener('click', function(e) {
+                        e.stopPropagation(); // Prevent header click event
+                        toggleContent();
+                    });
+                }
+                
+                // Make header clickable
+                if (header && aiControlsContent) {
+                    header.addEventListener('click', toggleContent);
+                }
+                
+                // Handle Auto Move toggle
+                const autoMoveCheckbox = document.getElementById('autoMove');
+                const autoMoveStatus = document.getElementById('autoMoveStatus');
+                if (autoMoveCheckbox && autoMoveStatus) {
+                    autoMoveCheckbox.addEventListener('change', function() {
+                        autoMoveStatus.textContent = this.checked ? 'On' : 'Off';
+                        autoMoveStatus.style.color = this.checked ? '#4CAF50' : '#666';
+                    });
+                }
+                
+                // Handle Auto Run toggle
+                const autoRunCheckbox = document.getElementById('autoRun');
+                const autoRunStatus = document.getElementById('autoRunStatus');
+                if (autoRunCheckbox && autoRunStatus) {
+                    autoRunCheckbox.addEventListener('change', function() {
+                        autoRunStatus.textContent = this.checked ? 'On' : 'Off';
+                        autoRunStatus.style.color = this.checked ? '#FF9800' : '#666';
+                    });
+                }
                 
                 tabButtons.forEach(button => {
                     button.addEventListener('click', function() {
@@ -2521,147 +2813,277 @@ function main() {
     // Function to load user settings using await GM.getValue
     myFunctions.loadSettings = async function() {
         try {
-            const savedSettings = await GM.getValue('chessAISettings');
-            if (savedSettings) {
-                const settings = JSON.parse(savedSettings);
+            // Load saved settings
+            const savedDepth = await GM.getValue('depth', 11);
+            const savedElo = await GM.getValue('elo', 1500);
+            const savedAutoMove = await GM.getValue('autoMove', false);
+            const savedAutoRun = await GM.getValue('autoRun', false);
+            const savedShowArrows = await GM.getValue('showArrows', true);
+            const savedPersistentHighlights = await GM.getValue('persistentHighlights', true);
+            const savedMoveIndicatorType = await GM.getValue('moveIndicatorType', 'highlights');
+            const savedHumanMode = await GM.getValue('humanMode', false);
+            const savedHumanLevel = await GM.getValue('humanLevel', 'intermediate');
+            const savedFusionMode = await GM.getValue('fusionMode', false);
+            const savedWhiteAdvantageColor = await GM.getValue('whiteAdvantageColor', '#4CAF50');
+            const savedBlackAdvantageColor = await GM.getValue('blackAdvantageColor', '#F44336');
+            const savedFirstRun = await GM.getValue('firstRun', true);
                 
                 // Apply saved settings
-                // First apply ELO since it affects depth limits
-                if (settings.eloRating) {
-                    $('#eloSlider')[0].value = settings.eloRating;
-                    $('#eloValue')[0].textContent = settings.eloRating;
-                    myVars.eloRating = settings.eloRating;
-                    setEngineElo(settings.eloRating);
-                    
-                    // Now we have maxDepthForElo set based on the ELO
-                }
-                
-                // Then apply depth, respecting the ELO-based limits
-                if (settings.depth) {
-                    let depthToApply = settings.depth;
-                    
-                    // If we have a max depth for the current ELO, respect it
-                    if (myVars.maxDepthForElo !== undefined) {
-                        depthToApply = Math.min(settings.depth, myVars.maxDepthForElo);
-                    }
-                    
-                    $('#depthSlider')[0].value = depthToApply;
-                    $('#depthText')[0].innerHTML = "Current Depth: <strong>" + depthToApply + "</strong>";
-                    lastValue = depthToApply;
-                    
-                    // Re-add the depth note if it exists
-                    const depthNote = document.getElementById('depthNote');
-                    if (depthNote && $('#depthText')[0]) {
-                        $('#depthText')[0].appendChild(depthNote);
-                    }
-                }
-                
-                if (settings.showArrows !== undefined) {
-                    $('#showArrows')[0].checked = settings.showArrows;
-                    myVars.showArrows = settings.showArrows;
-                }
-                
-                if (settings.persistentHighlights !== undefined) {
-                    $('#persistentHighlights')[0].checked = settings.persistentHighlights;
-                    myVars.persistentHighlights = settings.persistentHighlights;
-                }
-                
-                if (settings.moveIndicatorType) {
-                    myVars.moveIndicatorType = settings.moveIndicatorType;
-                    $(`#moveIndicator${settings.moveIndicatorType.charAt(0).toUpperCase() + settings.moveIndicatorType.slice(1)}`).prop('checked', true);
-                } else {
-                    // Default to highlights if not set
-                    myVars.moveIndicatorType = 'highlights';
-                    $('#moveIndicatorHighlights').prop('checked', true);
-                }
-                
-                if (settings.autoRun !== undefined) {
-                    $('#autoRun')[0].checked = settings.autoRun;
-                    myVars.autoRun = settings.autoRun;
-                    
-                    // Update auto run status indicator
-                    if ($('#autoRunStatus')[0]) {
-                        $('#autoRunStatus').text(settings.autoRun ? 'On' : 'Off');
-                        $('#autoRunStatus').css('color', settings.autoRun ? '#4CAF50' : '#666');
-                    }
-                }
-                
-                if (settings.autoMove !== undefined) {
-                    $('#autoMove')[0].checked = settings.autoMove;
-                    myVars.autoMove = settings.autoMove;
-                }
-                
-                if (settings.timeDelayMin) {
-                    $('#timeDelayMin')[0].value = settings.timeDelayMin;
-                }
-                
-                if (settings.timeDelayMax) {
-                    $('#timeDelayMax')[0].value = settings.timeDelayMax;
-                }
-                
-                if (settings.evalBarTheme) {
-                    $('#evalBarColor').val(settings.evalBarTheme);
-                    
-                    if (settings.evalBarTheme === 'custom') {
-                        $('#customColorContainer').show();
-                        
-                        if (settings.whiteAdvantageColor) {
-                            $('#whiteAdvantageColor').val(settings.whiteAdvantageColor);
-                            myVars.whiteAdvantageColor = settings.whiteAdvantageColor;
-                        }
-                        
-                        if (settings.blackAdvantageColor) {
-                            $('#blackAdvantageColor').val(settings.blackAdvantageColor);
-                            myVars.blackAdvantageColor = settings.blackAdvantageColor;
-                        }
-                    } else {
-                        // Apply predefined color themes
-                        let whiteColor, blackColor;
-                        switch(settings.evalBarTheme) {
-                            case 'blue':
-                                whiteColor = '#2196F3'; // Blue
-                                blackColor = '#FF9800'; // Orange
-                                break;
-                            case 'purple':
-                                whiteColor = '#9C27B0'; // Purple
-                                blackColor = '#FFEB3B'; // Yellow
-                                break;
-                            default: // default
-                                whiteColor = '#4CAF50'; // Green
-                                blackColor = '#F44336'; // Red
-                        }
-                        
-                        myVars.whiteAdvantageColor = whiteColor;
-                        myVars.blackAdvantageColor = blackColor;
-                    }
-                }
-                
-                if (settings.fusionMode !== undefined) {
-                    $('#fusionMode').prop('checked', settings.fusionMode);
-                    myVars.fusionMode = settings.fusionMode;
-                }
-                
-                // Apply Human mode settings
-                if (settings.humanMode) {
-                    // Set human mode active state
-                    $('#humanMode').prop('checked', settings.humanMode.active);
-                    
-                    // Set human mode level
-                    if (settings.humanMode.level) {
-                        $('#humanModeSelect').val(settings.humanMode.level);
-                    }
-                    
-                    // Apply human mode if active
-                    if (settings.humanMode.active) {
-                        myFunctions.updateHumanMode(true);
-                        $('#eloSlider').prop('disabled', true);
-                    }
-                }
+            myVars.depth = savedDepth;
+            myVars.eloRating = savedElo;
+            myVars.autoMove = savedAutoMove;
+            myVars.autoRun = savedAutoRun;
+            myVars.showArrows = savedShowArrows;
+            myVars.persistentHighlights = savedPersistentHighlights;
+            myVars.moveIndicatorType = savedMoveIndicatorType;
+            myVars.humanMode = savedHumanMode;
+            myVars.humanLevel = savedHumanLevel;
+            myVars.fusionMode = savedFusionMode;
+            myVars.whiteAdvantageColor = savedWhiteAdvantageColor;
+            myVars.blackAdvantageColor = savedBlackAdvantageColor;
+            
+            // Update UI elements to match saved settings
+            if ($('#depthSlider')[0]) {
+                $('#depthSlider')[0].value = savedDepth;
+                $('#depthText').html('Current Depth: <strong>' + savedDepth + '</strong>');
             }
+            
+            if ($('#eloSlider')[0]) {
+                $('#eloSlider')[0].value = savedElo;
+                $('#eloText').html('Current ELO: <strong>' + savedElo + '</strong>');
+            }
+            
+            if ($('#autoMove')[0]) {
+                $('#autoMove')[0].checked = savedAutoMove;
+            }
+            
+            if ($('#autoRun')[0]) {
+                $('#autoRun')[0].checked = savedAutoRun;
+            }
+            
+            if ($('#showArrows')[0]) {
+                $('#showArrows')[0].checked = savedShowArrows;
+            }
+            
+            if ($('#persistentHighlights')[0]) {
+                $('#persistentHighlights')[0].checked = savedPersistentHighlights;
+            }
+            
+            if ($('input[name="moveIndicatorType"]').length) {
+                $('input[name="moveIndicatorType"][value="' + savedMoveIndicatorType + '"]').prop('checked', true);
+            }
+            
+            if ($('#humanMode')[0]) {
+                $('#humanMode')[0].checked = savedHumanMode;
+            }
+            
+            if ($('#humanLevelSelect')[0]) {
+                $('#humanLevelSelect')[0].value = savedHumanLevel;
+            }
+            
+            if ($('#fusionMode')[0]) {
+                $('#fusionMode')[0].checked = savedFusionMode;
+            }
+            
+            if ($('#whiteAdvantageColor')[0]) {
+                $('#whiteAdvantageColor')[0].value = savedWhiteAdvantageColor;
+            }
+            
+            if ($('#blackAdvantageColor')[0]) {
+                $('#blackAdvantageColor')[0].value = savedBlackAdvantageColor;
+            }
+            
+            // Show welcome modal for first-time users
+            if (savedFirstRun) {
+                setTimeout(() => {
+                    myFunctions.showWelcomeModal();
+                    GM.setValue('firstRun', false);
+                }, 1000);
+            }
+            
+            console.log('Settings loaded successfully');
         } catch (error) {
-            console.log('Error loading settings:', error);
+            console.error('Error loading settings:', error);
         }
-    };
+    }
+    
+    // Function to show welcome modal for first-time users
+    function showWelcomeModal() {
+        // Create welcome modal
+        const welcomeModal = document.createElement('div');
+        welcomeModal.id = 'welcomeModal';
+        welcomeModal.style = `
+            display: flex;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.7);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+        `;
+        
+        const modalContent = document.createElement('div');
+        modalContent.style = `
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+            position: relative;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+        `;
+        
+        const closeBtn = document.createElement('span');
+        closeBtn.innerHTML = '&times;';
+        closeBtn.style = `
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            font-size: 24px;
+            cursor: pointer;
+            color: #333;
+            transition: color 0.2s;
+        `;
+        closeBtn.onmouseover = function() {
+            this.style.color = '#F44336';
+        };
+        closeBtn.onmouseout = function() {
+            this.style.color = '#333';
+        };
+        closeBtn.onclick = function() {
+            welcomeModal.style.display = 'none';
+        };
+        
+        modalContent.appendChild(closeBtn);
+        
+        // Welcome content
+        const welcomeTitle = document.createElement('h2');
+        welcomeTitle.textContent = 'Welcome to Chess AI!';
+        welcomeTitle.style = 'margin-top: 0; color: #2196F3; border-bottom: 2px solid #eee; padding-bottom: 10px;';
+        modalContent.appendChild(welcomeTitle);
+        
+        const welcomeText = document.createElement('p');
+        welcomeText.textContent = 'Thank you for installing Chess AI. This tool helps you analyze chess positions and find the best moves during your games on Chess.com.';
+        welcomeText.style = 'margin-bottom: 20px; color: #666;';
+        modalContent.appendChild(welcomeText);
+        
+        // Quick start guide
+        const quickStartTitle = document.createElement('h3');
+        quickStartTitle.textContent = 'Quick Start Guide';
+        quickStartTitle.style = 'color: #4CAF50; margin-bottom: 15px;';
+        modalContent.appendChild(quickStartTitle);
+        
+        const steps = [
+            { title: 'Run the Engine', content: 'Press any key from Q to M to run the engine at different depths. Higher depths give stronger analysis but take longer.' },
+            { title: 'View Best Moves', content: 'The best moves will be highlighted on the board, and the evaluation bar will show who has the advantage.' },
+            { title: 'Adjust Settings', content: 'Click the settings icon to customize the engine strength, visual indicators, and auto-play options.' },
+            { title: 'Keyboard Shortcuts', content: 'Use keyboard shortcuts for quick access. Press the "Keyboard Shortcuts" button to see all available shortcuts.' }
+        ];
+        
+        const stepsList = document.createElement('div');
+        stepsList.style = 'margin-bottom: 25px;';
+        
+        steps.forEach((step, index) => {
+            const stepItem = document.createElement('div');
+            stepItem.style = 'margin-bottom: 15px; display: flex;';
+            
+            const stepNumber = document.createElement('div');
+            stepNumber.textContent = (index + 1);
+            stepNumber.style = `
+                width: 25px;
+                height: 25px;
+                background-color: #2196F3;
+                color: white;
+                border-radius: 50%;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                margin-right: 15px;
+                flex-shrink: 0;
+                font-weight: bold;
+            `;
+            
+            const stepContent = document.createElement('div');
+            
+            const stepTitle = document.createElement('div');
+            stepTitle.textContent = step.title;
+            stepTitle.style = 'font-weight: bold; margin-bottom: 5px;';
+            
+            const stepDescription = document.createElement('div');
+            stepDescription.textContent = step.content;
+            stepDescription.style = 'color: #666;';
+            
+            stepContent.appendChild(stepTitle);
+            stepContent.appendChild(stepDescription);
+            
+            stepItem.appendChild(stepNumber);
+            stepItem.appendChild(stepContent);
+            
+            stepsList.appendChild(stepItem);
+        });
+        
+        modalContent.appendChild(stepsList);
+        
+        // Tips section
+        const tipsTitle = document.createElement('h3');
+        tipsTitle.textContent = 'Pro Tips';
+        tipsTitle.style = 'color: #FF9800; margin-bottom: 15px;';
+        modalContent.appendChild(tipsTitle);
+        
+        const tipsList = document.createElement('ul');
+        tipsList.style = 'margin-bottom: 25px; padding-left: 20px;';
+        
+        const tips = [
+            'Use depths 1-10 for quick analysis and casual play.',
+            'Use depths 15+ for serious analysis and difficult positions.',
+            'Enable "Auto Move" to automatically play the best move.',
+            'Try "Human Mode" to get more natural, human-like suggestions.',
+            'Customize the evaluation bar colors in the Visual tab.'
+        ];
+        
+        tips.forEach(tip => {
+            const tipItem = document.createElement('li');
+            tipItem.textContent = tip;
+            tipItem.style = 'margin-bottom: 8px; color: #666;';
+            tipsList.appendChild(tipItem);
+        });
+        
+        modalContent.appendChild(tipsList);
+        
+        // Get started button
+        const getStartedBtn = document.createElement('button');
+        getStartedBtn.textContent = 'Get Started';
+        getStartedBtn.style = `
+            width: 100%;
+            padding: 12px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 16px;
+            transition: background-color 0.2s;
+        `;
+        getStartedBtn.onmouseover = function() {
+            this.style.backgroundColor = '#45a049';
+        };
+        getStartedBtn.onmouseout = function() {
+            this.style.backgroundColor = '#4CAF50';
+        };
+        getStartedBtn.onclick = function() {
+            welcomeModal.style.display = 'none';
+        };
+        
+        modalContent.appendChild(getStartedBtn);
+        
+        welcomeModal.appendChild(modalContent);
+        document.body.appendChild(welcomeModal);
+    }
 
     // Create a move history display
     myFunctions.createMoveHistoryDisplay = function() {
@@ -2827,6 +3249,210 @@ function main() {
         // Normalize complexity to a reasonable range
         complexity = Math.abs(complexity); // Ensure it's positive
         return Math.floor(complexity / 10); // Scale down for thinking time calculation
+    }
+
+    myFunctions.extractOpponentRating = function() {
+        // Try to find the opponent's rating
+        try {
+            const ratingElements = document.querySelectorAll('.user-tagline-rating');
+            if (ratingElements.length >= 2) {
+                // Find the element that doesn't match the player's username
+                const playerUsername = document.querySelector('.user-username-component')?.textContent.trim();
+                
+                for (const element of ratingElements) {
+                    const usernameElement = element.closest('.user-tagline')?.querySelector('.user-username-component');
+                    if (usernameElement && usernameElement.textContent.trim() !== playerUsername) {
+                        const rating = parseInt(element.textContent.trim());
+                        if (!isNaN(rating)) {
+                            console.log(`Opponent rating detected: ${rating}`);
+                            return rating;
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error extracting opponent rating:', error);
+        }
+        
+        return null;
+    }
+    
+    // Function to show welcome modal for first-time users
+    myFunctions.showWelcomeModal = function() {
+        // Create welcome modal
+        const welcomeModal = document.createElement('div');
+        welcomeModal.id = 'welcomeModal';
+        welcomeModal.style = `
+            display: flex;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.7);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+        `;
+        
+        const modalContent = document.createElement('div');
+        modalContent.style = `
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+            position: relative;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+        `;
+        
+        const closeBtn = document.createElement('span');
+        closeBtn.innerHTML = '&times;';
+        closeBtn.style = `
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            font-size: 24px;
+            cursor: pointer;
+            color: #333;
+            transition: color 0.2s;
+        `;
+        closeBtn.onmouseover = function() {
+            this.style.color = '#F44336';
+        };
+        closeBtn.onmouseout = function() {
+            this.style.color = '#333';
+        };
+        closeBtn.onclick = function() {
+            welcomeModal.style.display = 'none';
+        };
+        
+        modalContent.appendChild(closeBtn);
+        
+        // Welcome content
+        const welcomeTitle = document.createElement('h2');
+        welcomeTitle.textContent = 'Welcome to Chess AI!';
+        welcomeTitle.style = 'margin-top: 0; color: #2196F3; border-bottom: 2px solid #eee; padding-bottom: 10px;';
+        modalContent.appendChild(welcomeTitle);
+        
+        const welcomeText = document.createElement('p');
+        welcomeText.textContent = 'Thank you for installing Chess AI. This tool helps you analyze chess positions and find the best moves during your games on Chess.com.';
+        welcomeText.style = 'margin-bottom: 20px; color: #666;';
+        modalContent.appendChild(welcomeText);
+        
+        // Quick start guide
+        const quickStartTitle = document.createElement('h3');
+        quickStartTitle.textContent = 'Quick Start Guide';
+        quickStartTitle.style = 'color: #4CAF50; margin-bottom: 15px;';
+        modalContent.appendChild(quickStartTitle);
+        
+        const steps = [
+            { title: 'Run the Engine', content: 'Press any key from Q to M to run the engine at different depths. Higher depths give stronger analysis but take longer.' },
+            { title: 'View Best Moves', content: 'The best moves will be highlighted on the board, and the evaluation bar will show who has the advantage.' },
+            { title: 'Adjust Settings', content: 'Click the settings icon to customize the engine strength, visual indicators, and auto-play options.' },
+            { title: 'Keyboard Shortcuts', content: 'Use keyboard shortcuts for quick access. Press the "Keyboard Shortcuts" button to see all available shortcuts.' }
+        ];
+        
+        const stepsList = document.createElement('div');
+        stepsList.style = 'margin-bottom: 25px;';
+        
+        steps.forEach((step, index) => {
+            const stepItem = document.createElement('div');
+            stepItem.style = 'margin-bottom: 15px; display: flex;';
+            
+            const stepNumber = document.createElement('div');
+            stepNumber.textContent = (index + 1);
+            stepNumber.style = `
+                width: 25px;
+                height: 25px;
+                background-color: #2196F3;
+                color: white;
+                border-radius: 50%;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                margin-right: 15px;
+                flex-shrink: 0;
+                font-weight: bold;
+            `;
+            
+            const stepContent = document.createElement('div');
+            
+            const stepTitle = document.createElement('div');
+            stepTitle.textContent = step.title;
+            stepTitle.style = 'font-weight: bold; margin-bottom: 5px;';
+            
+            const stepDescription = document.createElement('div');
+            stepDescription.textContent = step.content;
+            stepDescription.style = 'color: #666;';
+            
+            stepContent.appendChild(stepTitle);
+            stepContent.appendChild(stepDescription);
+            
+            stepItem.appendChild(stepNumber);
+            stepItem.appendChild(stepContent);
+            
+            stepsList.appendChild(stepItem);
+        });
+        
+        modalContent.appendChild(stepsList);
+        
+        // Tips section
+        const tipsTitle = document.createElement('h3');
+        tipsTitle.textContent = 'Pro Tips';
+        tipsTitle.style = 'color: #FF9800; margin-bottom: 15px;';
+        modalContent.appendChild(tipsTitle);
+        
+        const tipsList = document.createElement('ul');
+        tipsList.style = 'margin-bottom: 25px; padding-left: 20px;';
+        
+        const tips = [
+            'Use depths 1-10 for quick analysis and casual play.',
+            'Use depths 15+ for serious analysis and difficult positions.',
+            'Enable "Auto Move" to automatically play the best move.',
+            'Try "Human Mode" to get more natural, human-like suggestions.',
+            'Customize the evaluation bar colors in the Visual tab.'
+        ];
+        
+        tips.forEach(tip => {
+            const tipItem = document.createElement('li');
+            tipItem.textContent = tip;
+            tipItem.style = 'margin-bottom: 8px; color: #666;';
+            tipsList.appendChild(tipItem);
+        });
+        
+        modalContent.appendChild(tipsList);
+        
+        // Get started button
+        const getStartedBtn = document.createElement('button');
+        getStartedBtn.textContent = 'Get Started';
+        getStartedBtn.style = `
+            width: 100%;
+            padding: 12px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 16px;
+            transition: background-color 0.2s;
+        `;
+        getStartedBtn.onmouseover = function() {
+            this.style.backgroundColor = '#45a049';
+        };
+        getStartedBtn.onmouseout = function() {
+            this.style.backgroundColor = '#4CAF50';
+        };
+        getStartedBtn.onclick = function() {
+            welcomeModal.style.display = 'none';
+        };
+        
+        modalContent.appendChild(getStartedBtn);
+        
+        welcomeModal.appendChild(modalContent);
+        document.body.appendChild(welcomeModal);
     }
 }
 
