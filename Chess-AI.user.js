@@ -1265,8 +1265,124 @@ function main() {
                 <span style="font-weight: bold; font-size: 15px;">Chess AI Controls</span>
                 <span id="collapseBtn" style="transition: transform 0.3s;">▼</span>
             `;
-            div.appendChild(header);
+            //div.appendChild(header);
+
+
+            async function createDraggableHeader(div) {
+                // Set initial positioning and z-index
+                div.style.position = 'fixed';
+                div.style.zIndex = '9999';
+                div.style.margin = '0';
+                div.style.padding = '0';
             
+                var header = document.createElement('div');
+                header.style = `
+                    background-color: #2196F3;
+                    color: white;
+                    padding: 12px 15px;
+                    border-top-left-radius: 12px;
+                    border-top-right-radius: 12px;
+                    cursor: move;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    font-weight: 600;
+                    letter-spacing: 0.3px;
+                    user-select: none;
+                `;
+                header.innerHTML = `
+                    <span id="dragArea" style="font-weight: bold; font-size: 15px; flex-grow: 1; cursor: move;">Chess AI Controls</span>
+                    <span id="collapseBtn" style="transition: transform 0.3s;">▼</span>
+                `;
+                div.appendChild(header);
+            
+                // Make the entire div draggable
+                let isDragging = false;
+                let currentX;
+                let currentY;
+                let initialX;
+                let initialY;
+                let xOffset = 0;
+                let yOffset = 0;
+            
+                // Restore previous position on load
+                try {
+                    const savedPosition = await GM.getValue('GUI Position', null);
+                    if (savedPosition) {
+                        xOffset = savedPosition.x;
+                        yOffset = savedPosition.y;
+                        div.style.transform = `translate3d(${xOffset}px, ${yOffset}px, 0)`;
+                    }
+                } catch (error) {
+                    console.error('Error loading saved position:', error);
+                }
+            
+                // Drag area now includes the entire text span
+                const dragArea = header.querySelector('#dragArea');
+            
+                // Event listeners for dragging
+                dragArea.addEventListener('mousedown', dragStart);
+                document.addEventListener('mouseup', dragEnd);
+                document.addEventListener('mousemove', drag);
+            
+                function dragStart(e) {
+                    // Prevent default to stop text selection and scrolling
+                    e.preventDefault();
+                    
+                    initialX = e.clientX - xOffset;
+                    initialY = e.clientY - yOffset;
+            
+                    isDragging = true;
+                }
+            
+                function dragEnd(e) {
+                    // Prevent default to stop any browser scrolling behavior
+                    e.preventDefault();
+                    
+                    initialX = currentX;
+                    initialY = currentY;
+            
+                    isDragging = false;
+            
+                    // Save the current position
+                    try {
+                        GM.setValue('GUI Position', { x: xOffset, y: yOffset });
+                    } catch (error) {
+                        console.error('Error saving position:', error);
+                    }
+                }
+            
+                function drag(e) {
+                    if (isDragging) {
+                        // Prevent default to stop scrolling and text selection
+                        e.preventDefault();
+                        
+                        // Constrain to viewport
+                        currentX = Math.max(0, Math.min(e.clientX - initialX, window.innerWidth - div.offsetWidth));
+                        currentY = Math.max(0, Math.min(e.clientY - initialY, window.innerHeight - div.offsetHeight));
+            
+                        xOffset = currentX;
+                        yOffset = currentY;
+            
+                        setTranslate(currentX, currentY, div);
+                    }
+                }
+            
+                function setTranslate(xPos, yPos, el) {
+                    el.style.transform = `translate3d(${xPos}px, ${yPos}px, 0)`;
+                }
+            
+                return header;
+            }
+            
+            // Usage example:
+             (async () => {
+                 //var div = document.createElement('div');
+                 await createDraggableHeader(div);
+             })();
+
+
+
             // Create content container
             var contentContainer = document.createElement('div');
             contentContainer.id = 'aiControlsContent';
