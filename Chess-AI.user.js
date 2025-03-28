@@ -4,21 +4,21 @@
 // @version      1.0.0
 // @description  Chess.com Bot/Cheat that finds the best move with evaluation bar and ELO control!
 // @author       longkidkoolstar
-// @license      MIT
+// @license      none
 // @match        https://www.chess.com/play/*
 // @match        https://www.chess.com/game/*
 // @icon         data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==
 // @grant       GM.getValue
 // @grant       GM.setValue
 // @grant       GM.getResourceText
-// @resource    stockfish.js        https://raw.githubusercontent.com/Auzgame/remote/main/stockfish.js
+// @resource    stockfish.js        https://raw.githubusercontent.com/longkidkoolstar/stockfish/refs/heads/main/stockfish.js
 // @require     https://greasyfork.org/scripts/445697/code/index.js
 // @require     https://code.jquery.com/jquery-3.6.0.min.js
 // @run-at      document-start
 // ==/UserScript==
 
 
-const currentVersion = '1.4.0'; // Updated version number
+const currentVersion = '1.0.0'; // Updated version number
 
 function main() {
 
@@ -2790,8 +2790,7 @@ function main() {
         }
     }
 
-    //Removed due to script being reported. I tried to make it so people can know when bug fixes come out. Clearly people don't like that.
-    //getVersion();
+//    getVersion();
 
     const waitForChessBoard = setInterval(() => {
         if(loaded) {
