@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Chess AI
 // @namespace    github.com/longkidkoolstar
-// @version      1.0.0
+// @version      1.0.1
 // @description  Chess.com Bot/Cheat that finds the best move with evaluation bar and ELO control!
 // @author       longkidkoolstar
 // @license      none
@@ -18,7 +18,7 @@
 // ==/UserScript==
 
 
-const currentVersion = '1.0.0'; // Updated version number
+const currentVersion = '1.0.1'; // Updated version number
 
 function main() {
 
@@ -2779,18 +2779,37 @@ function main() {
 
 
     async function getVersion(){
-        var GF = new GreasyFork; // set upping api
-        var code = await GF.get().script().code(460208); // Get code
-        var version = GF.parseScriptCodeMeta(code).filter(e => e.meta === '@version')[0].value; // filtering array and getting value of @version
+        try {
+            const response = await fetch('https://greasyfork.org/en/scripts/531171-chess-ai');
+            const html = await response.text();
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            const versionElement = doc.querySelector('dd.script-show-version span');
+            const version = versionElement.textContent;
 
-        if(currentVersion !== version){
-            while(true){
-                alert('UPDATE THIS SCRIPT IN ORDER TO PROCEED!');
+            console.log("Fetched version:", version);
+            console.log("Current version:", currentVersion);
+
+            if(currentVersion !== version){
+                console.log("Version mismatch detected!");
+                if (document.hasFocus()) {
+                    alert('UPDATE THIS SCRIPT IN ORDER TO PROCEED!');
+                    window.open('https://greasyfork.org/en/scripts/531171-chess-ai', '_blank');
+                }
+                // Recursive call to keep displaying the popup
+                setTimeout(getVersion, 1000); // Call again after 1 second
+            } else {
+                console.log("Version check passed");
             }
+        } catch (error) {
+            console.error("Error fetching version:", error);
+            // Recursive call to keep trying to fetch the version
+            setTimeout(getVersion, 1000); // Call again after 1 second
         }
     }
 
-//    getVersion();
+    getVersion();
+
 
     const waitForChessBoard = setInterval(() => {
         if(loaded) {
