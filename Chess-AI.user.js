@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Chess AI
 // @namespace    github.com/longkidkoolstar
-// @version      1.0.2
+// @version      1.0.3
 // @description  Chess.com Bot/Cheat that finds the best move with evaluation bar and ELO control!
 // @author       longkidkoolstar
 // @license      none
@@ -18,7 +18,7 @@
 // ==/UserScript==
 
 
-const currentVersion = '1.0.2'; // Updated version number
+const currentVersion = '1.0.3'; // Updated version number
 
 function main() {
 
@@ -895,46 +895,44 @@ function main() {
 
     // Function to extract opponent's rating from the page
     function extractOpponentRating() {
+        // Try to find the opponent's rating using the new selector
         try {
-            // Look for user tagline components that contain ratings
-            const userTaglines = document.querySelectorAll('.user-tagline-component');
-
-            if (userTaglines.length === 0) {
-                console.log('No user taglines found');
-                return null;
-            }
-
-            // Find the opponent's tagline (not the current user)
-            let opponentRating = null;
-
-            for (const tagline of userTaglines) {
-                // Extract the rating from the tagline
-                const ratingSpan = tagline.querySelector('.user-tagline-rating');
-                if (ratingSpan) {
-                    const ratingText = ratingSpan.textContent.trim();
-                    // Extract the number from format like "(2228)"
-                    const ratingMatch = ratingText.match(/\((\d+)\)/);
-
-                    if (ratingMatch && ratingMatch[1]) {
-                        opponentRating = parseInt(ratingMatch[1]);
-                        console.log(`Found opponent rating: ${opponentRating}`);
-
-                        // Update the opponent rating info in the UI
-                        const opponentRatingInfo = document.getElementById('opponentRatingInfo');
-                        if (opponentRatingInfo) {
-                            opponentRatingInfo.textContent = `When enabled, the engine will play at the same rating as your opponent (${opponentRating})`;
-                        }
-
-                        break;
+            // Try the new selector first
+            const ratingElement = document.querySelector("#board-layout-player-top .cc-user-rating-white");
+            if (ratingElement) {
+                const ratingText = ratingElement.textContent.trim();
+                const ratingMatch = ratingText.match(/\((\d+)\)/);
+                if (ratingMatch && ratingMatch[1]) {
+                    const rating = parseInt(ratingMatch[1]);
+                    if (!isNaN(rating)) {
+                        console.log(`Opponent rating detected: ${rating}`);
+                        return rating;
                     }
                 }
             }
 
-            return opponentRating;
+            // Fallback to old selector if new one fails
+            const ratingElements = document.querySelectorAll('.user-tagline-rating');
+            if (ratingElements.length >= 2) {
+                // Find the element that doesn't match the player's username
+                const playerUsername = document.querySelector('.user-username-component')?.textContent.trim();
+
+                for (const element of ratingElements) {
+                    const usernameElement = element.closest('.user-tagline')?.querySelector('.user-username-component');
+                    if (usernameElement && usernameElement.textContent.trim() !== playerUsername) {
+                        const rating = parseInt(element.textContent.trim());
+                        if (!isNaN(rating)) {
+                            console.log(`Opponent rating detected (fallback): ${rating}`);
+                            return rating;
+                        }
+                    }
+                }
+            }
         } catch (error) {
             console.error('Error extracting opponent rating:', error);
-            return null;
         }
+
+        return null;
     }
 
     // Function to update fusion mode status
@@ -3527,8 +3525,23 @@ function main() {
     }
 
     myFunctions.extractOpponentRating = function() {
-        // Try to find the opponent's rating
+        // Try to find the opponent's rating using the new selector
         try {
+            // Try the new selector first
+            const ratingElement = document.querySelector("#board-layout-player-top .cc-user-rating-white");
+            if (ratingElement) {
+                const ratingText = ratingElement.textContent.trim();
+                const ratingMatch = ratingText.match(/\((\d+)\)/);
+                if (ratingMatch && ratingMatch[1]) {
+                    const rating = parseInt(ratingMatch[1]);
+                    if (!isNaN(rating)) {
+                        console.log(`Opponent rating detected: ${rating}`);
+                        return rating;
+                    }
+                }
+            }
+
+            // Fallback to old selector if new one fails
             const ratingElements = document.querySelectorAll('.user-tagline-rating');
             if (ratingElements.length >= 2) {
                 // Find the element that doesn't match the player's username
@@ -3539,7 +3552,7 @@ function main() {
                     if (usernameElement && usernameElement.textContent.trim() !== playerUsername) {
                         const rating = parseInt(element.textContent.trim());
                         if (!isNaN(rating)) {
-                            console.log(`Opponent rating detected: ${rating}`);
+                            console.log(`Opponent rating detected (fallback): ${rating}`);
                             return rating;
                         }
                     }
