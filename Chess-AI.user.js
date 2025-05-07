@@ -18,7 +18,7 @@
 // ==/UserScript==
 
 
-const currentVersion = '1.0.4'; // Updated version number
+const currentVersion = '1.0.5'; // Updated version number
 
 function main() {
 
