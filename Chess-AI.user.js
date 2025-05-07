@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Chess AI
 // @namespace    github.com/longkidkoolstar
-// @version      1.0.4
+// @version      1.0.5
 // @description  Chess.com Bot/Cheat that finds the best move with evaluation bar and ELO control!
 // @author       longkidkoolstar
 // @license      none
@@ -18,7 +18,7 @@
 // ==/UserScript==
 
 
-const currentVersion = '1.0.3'; // Updated version number
+const currentVersion = '1.0.4'; // Updated version number
 
 function main() {
 
@@ -386,6 +386,12 @@ function main() {
         const dx = toX - fromX;
         const dy = toY - fromY;
         const angle = Math.atan2(dy, dx);
+        const length = Math.sqrt(dx * dx + dy * dy);
+
+        // Get arrow color - use custom colors if defined, otherwise use default
+        // Chess.com-like blue with slightly improved saturation
+        const arrowColor = myVars.arrowColor || "#0077CC";
+        const arrowOpacity = 0.9;
 
         // Adjust start and end points to not cover the pieces
         const margin = squareSize * 0.3;
@@ -394,44 +400,277 @@ function main() {
         const endX = toX - Math.cos(angle) * margin;
         const endY = toY - Math.sin(angle) * margin;
 
-        // Create the arrow line
-        const line = document.createElementNS(svgNS, "line");
-        line.setAttribute("x1", startX);
-        line.setAttribute("y1", startY);
-        line.setAttribute("x2", endX);
-        line.setAttribute("y2", endY);
-        line.setAttribute("stroke", "rgb(235, 97, 80)");
-        line.setAttribute("stroke-width", squareSize / 8);
-        line.setAttribute("opacity", "0.8");
+        // Create a group for the arrow (for easier animation)
+        const arrowGroup = document.createElementNS(svgNS, "g");
+
+        // Add a filter for drop shadow
+        const filterId = `arrow-shadow-${Date.now()}`;
+        const filter = document.createElementNS(svgNS, "filter");
+        filter.setAttribute("id", filterId);
+        filter.setAttribute("x", "-20%");
+        filter.setAttribute("y", "-20%");
+        filter.setAttribute("width", "140%");
+        filter.setAttribute("height", "140%");
+
+        const feGaussianBlur = document.createElementNS(svgNS, "feGaussianBlur");
+        feGaussianBlur.setAttribute("in", "SourceAlpha");
+        feGaussianBlur.setAttribute("stdDeviation", "2");
+        feGaussianBlur.setAttribute("result", "blur");
+
+        const feOffset = document.createElementNS(svgNS, "feOffset");
+        feOffset.setAttribute("in", "blur");
+        feOffset.setAttribute("dx", "1");
+        feOffset.setAttribute("dy", "1");
+        feOffset.setAttribute("result", "offsetBlur");
+
+        const feFlood = document.createElementNS(svgNS, "feFlood");
+        feFlood.setAttribute("flood-color", "rgba(0,0,0,0.5)");
+        feFlood.setAttribute("flood-opacity", "0.3");
+        feFlood.setAttribute("result", "color");
+
+        const feComposite = document.createElementNS(svgNS, "feComposite");
+        feComposite.setAttribute("in", "color");
+        feComposite.setAttribute("in2", "offsetBlur");
+        feComposite.setAttribute("operator", "in");
+        feComposite.setAttribute("result", "shadow");
+
+        const feMerge = document.createElementNS(svgNS, "feMerge");
+
+        const feMergeNode1 = document.createElementNS(svgNS, "feMergeNode");
+        feMergeNode1.setAttribute("in", "shadow");
+
+        const feMergeNode2 = document.createElementNS(svgNS, "feMergeNode");
+        feMergeNode2.setAttribute("in", "SourceGraphic");
+
+        feMerge.appendChild(feMergeNode1);
+        feMerge.appendChild(feMergeNode2);
+
+        filter.appendChild(feGaussianBlur);
+        filter.appendChild(feOffset);
+        filter.appendChild(feFlood);
+        filter.appendChild(feComposite);
+        filter.appendChild(feMerge);
+
+        svg.appendChild(filter);
+
+        // Apply the filter to the arrow group
+        arrowGroup.setAttribute("filter", `url(#${filterId})`);
+
+        // Create the arrow shaft using a path for better control
+        const path = document.createElementNS(svgNS, "path");
+
+        // Check if we should use curved or straight arrows
+        const arrowStyle = myVars.arrowStyle || 'curved';
+
+        let pathData;
+        let ctrlX, ctrlY;
+
+        if (arrowStyle === 'curved') {
+            // CURVED ARROW STYLE (Chess.com style)
+            // Calculate control points for a slight curve that adapts to the move direction
+            // Adjust curve factor based on move length - shorter moves get more curve
+            const baseCurveFactor = 0.1;
+            const lengthFactor = Math.min(1, 150 / length); // Normalize length factor
+            const curveFactor = baseCurveFactor * lengthFactor;
+
+            const midX = (startX + endX) / 2;
+            const midY = (startY + endY) / 2;
+
+            // Determine curve direction based on the move
+            // We'll use the board center as a reference point to decide curve direction
+            const boardCenterX = boardRect.width / 2;
+            const boardCenterY = boardRect.height / 2;
+
+            // Calculate vectors from board center to start and end points
+            const startVecX = startX - boardCenterX;
+            const startVecY = startY - boardCenterY;
+            const endVecX = endX - boardCenterX;
+            const endVecY = endY - boardCenterY;
+
+            // Calculate cross product to determine which side to curve
+            // This will make the curve direction adapt based on the move's position relative to board center
+            const crossProduct = startVecX * endVecY - startVecY * endVecX;
+
+            // Apply curve in appropriate direction based on cross product
+            const perpX = Math.sign(crossProduct) * -Math.sin(angle) * length * curveFactor;
+            const perpY = Math.sign(crossProduct) * Math.cos(angle) * length * curveFactor;
+            ctrlX = midX + perpX;
+            ctrlY = midY + perpY;
+
+            // Create a quadratic bezier curve path
+            pathData = `M ${startX},${startY} Q ${ctrlX},${ctrlY} ${endX},${endY}`;
+        } else {
+            // STRAIGHT ARROW STYLE (Classic style)
+            // Simple straight line from start to end
+            pathData = `M ${startX},${startY} L ${endX},${endY}`;
+
+            // For arrow head calculation later, we still need control points
+            // For straight lines, the control point is just the end point
+            ctrlX = endX;
+            ctrlY = endY;
+        }
+        path.setAttribute("d", pathData);
+        path.setAttribute("stroke", arrowColor);
+        path.setAttribute("stroke-width", squareSize / 9);
+        path.setAttribute("fill", "none");
+        path.setAttribute("opacity", arrowOpacity);
+        path.setAttribute("stroke-linecap", "round");
 
         // Create the arrow head
         const arrowHead = document.createElementNS(svgNS, "polygon");
-        const arrowSize = squareSize / 4;
-        const arrowAngle = Math.PI / 7;
 
-        const point1X = endX;
-        const point1Y = endY;
-        const point2X = endX - arrowSize * Math.cos(angle - arrowAngle);
-        const point2Y = endY - arrowSize * Math.sin(angle - arrowAngle);
-        const point3X = endX - arrowSize * Math.cos(angle + arrowAngle);
-        const point3Y = endY - arrowSize * Math.sin(angle + arrowAngle);
+        // Calculate the direction at the end of the curve/line
+        // For a quadratic bezier, the tangent at the end point is from the control point to the end point
+        // For straight lines, this will just be the angle of the line
+        const endAngle = Math.atan2(endY - ctrlY, endX - ctrlX);
 
-        arrowHead.setAttribute("points", `${point1X},${point1Y} ${point2X},${point2Y} ${point3X},${point3Y}`);
-        arrowHead.setAttribute("fill", "rgb(235, 97, 80)");
-        arrowHead.setAttribute("opacity", "0.8");
+        let point1X, point1Y, point2X, point2Y, point3X, point3Y, point4X, point4Y;
 
-        // Add elements to SVG
-        svg.appendChild(line);
-        svg.appendChild(arrowHead);
+        if (arrowStyle === 'curved') {
+            // CURVED ARROW STYLE (Chess.com style)
+            // Adjust arrow size based on square size for better proportions
+            const arrowSize = squareSize / 3.2;
+
+            // Chess.com style arrow head with sharper angle
+            const arrowAngle = Math.PI / 7;
+
+            // Create a more refined arrow head shape with smooth transitions
+            point1X = endX; // Tip of the arrow
+            point1Y = endY;
+
+            // Left wing of arrow head
+            point2X = endX - arrowSize * Math.cos(endAngle - arrowAngle);
+            point2Y = endY - arrowSize * Math.sin(endAngle - arrowAngle);
+
+            // Middle indentation (chess.com style)
+            const indentFactor = 0.65; // How far back the middle indent goes
+            point3X = endX - arrowSize * indentFactor * Math.cos(endAngle);
+            point3Y = endY - arrowSize * indentFactor * Math.sin(endAngle);
+
+            // Right wing of arrow head
+            point4X = endX - arrowSize * Math.cos(endAngle + arrowAngle);
+            point4Y = endY - arrowSize * Math.sin(endAngle + arrowAngle);
+        } else {
+            // STRAIGHT ARROW STYLE (Classic style)
+            // Simpler arrow head for straight arrows
+            const arrowSize = squareSize / 3.5;
+            const arrowAngle = Math.PI / 6; // Wider angle for classic style
+
+            point1X = endX; // Tip of the arrow
+            point1Y = endY;
+
+            // Left wing of arrow head
+            point2X = endX - arrowSize * Math.cos(endAngle - arrowAngle);
+            point2Y = endY - arrowSize * Math.sin(endAngle - arrowAngle);
+
+            // Right wing of arrow head
+            point4X = endX - arrowSize * Math.cos(endAngle + arrowAngle);
+            point4Y = endY - arrowSize * Math.sin(endAngle + arrowAngle);
+
+            // For straight arrows, we use a triangular head (no middle indentation)
+            point3X = point1X; // Not used for straight arrows
+            point3Y = point1Y; // Not used for straight arrows
+        }
+
+        // Set the polygon points based on arrow style
+        if (arrowStyle === 'curved') {
+            // Four-point polygon for curved arrows (with middle indentation)
+            arrowHead.setAttribute("points", `${point1X},${point1Y} ${point2X},${point2Y} ${point3X},${point3Y} ${point4X},${point4Y}`);
+        } else {
+            // Three-point polygon for straight arrows (triangular head)
+            arrowHead.setAttribute("points", `${point1X},${point1Y} ${point2X},${point2Y} ${point4X},${point4Y}`);
+        }
+        arrowHead.setAttribute("fill", arrowColor);
+        arrowHead.setAttribute("opacity", arrowOpacity);
+
+        // Add elements to the arrow group
+        arrowGroup.appendChild(path);
+        arrowGroup.appendChild(arrowHead);
+
+        // Add the arrow group to the SVG
+        svg.appendChild(arrowGroup);
 
         // Add the SVG to the board
         boardElement.appendChild(svg);
+
+        // Check if animations are enabled
+        const animationsEnabled = myVars.arrowAnimation !== undefined ? myVars.arrowAnimation : true;
+
+        // Add entrance animation only if enabled
+        if (animationsEnabled) {
+            if (typeof anime !== 'undefined') {
+                // If anime.js is available, use it for smooth animation
+                anime({
+                    targets: path,
+                    strokeDashoffset: [anime.setDashoffset, 0],
+                    easing: 'easeInOutSine',
+                    duration: 300,
+                    delay: 0
+                });
+
+                anime({
+                    targets: arrowHead,
+                    opacity: [0, arrowOpacity],
+                    scale: [0.5, 1],
+                    easing: 'easeInOutSine',
+                    duration: 300,
+                    delay: 200
+                });
+            } else {
+                // Fallback animation using CSS
+                path.style.strokeDasharray = length;
+                path.style.strokeDashoffset = length;
+                path.style.animation = 'arrow-draw 0.3s ease-in-out forwards';
+
+                arrowHead.style.opacity = '0';
+                arrowHead.style.animation = 'arrow-fade-in 0.2s ease-in-out 0.2s forwards';
+
+                // Add the animation keyframes if they don't exist
+                if (!document.getElementById('arrow-animations')) {
+                    const style = document.createElement('style');
+                    style.id = 'arrow-animations';
+                    style.textContent = `
+                        @keyframes arrow-draw {
+                            to {
+                                stroke-dashoffset: 0;
+                            }
+                        }
+                        @keyframes arrow-fade-in {
+                            to {
+                                opacity: ${arrowOpacity};
+                            }
+                        }
+                    `;
+                    document.head.appendChild(style);
+                }
+            }
+        } else {
+            // If animations are disabled, just show the arrow immediately
+            path.style.opacity = arrowOpacity;
+            arrowHead.style.opacity = arrowOpacity;
+        }
 
         // If not persistent, remove after delay
         if (!isPersistent) {
             setTimeout(() => {
                 if (svg.parentNode) {
-                    svg.parentNode.removeChild(svg);
+                    // Check if animations are enabled
+                    if (animationsEnabled) {
+                        // Fade out animation
+                        const fadeOut = () => {
+                            arrowGroup.style.transition = 'opacity 0.3s ease-out';
+                            arrowGroup.style.opacity = '0';
+                            setTimeout(() => {
+                                if (svg.parentNode) {
+                                    svg.parentNode.removeChild(svg);
+                                }
+                            }, 300);
+                        };
+                        fadeOut();
+                    } else {
+                        // If animations are disabled, just remove immediately
+                        svg.parentNode.removeChild(svg);
+                    }
                 }
             }, 1800);
         }
@@ -1809,6 +2048,47 @@ function main() {
                                 <label for="moveIndicatorArrows"> Arrows</label>
                             </div>
                         </div>
+
+                        <!-- Arrow Color Customization -->
+                        <div id="arrowCustomizationContainer" style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px; display: none;">
+                            <label style="display: block; margin-bottom: 8px; font-weight: bold;">Arrow Customization:</label>
+                            <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px;">
+                                <label for="arrowColor">Arrow Color:</label>
+                                <input type="color" id="arrowColor" value="#0077CC" style="width: 40px; height: 30px;">
+                                <span style="font-size: 12px; color: #666; margin-left: 5px;">(Chess.com style)</span>
+                            </div>
+
+                            <!-- Arrow Style Options -->
+                            <div style="margin-top: 12px; margin-bottom: 10px;">
+                                <label style="display: block; margin-bottom: 8px;">Arrow Style:</label>
+                                <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                                    <input type="radio" id="arrowStyleCurved" name="arrowStyle" value="curved" checked style="margin-right: 8px;">
+                                    <label for="arrowStyleCurved"> Curved arrows (Chess.com style)</label>
+                                </div>
+                                <div style="display: flex; align-items: center;">
+                                    <input type="radio" id="arrowStyleStraight" name="arrowStyle" value="straight" style="margin-right: 8px;">
+                                    <label for="arrowStyleStraight"> Straight arrows (Classic style)</label>
+                                </div>
+                            </div>
+
+                            <!-- Arrow Animation Toggle -->
+                            <div style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px;">
+                                <div style="display: flex; align-items: center; justify-content: space-between;">
+                                    <label for="arrowAnimation" style="font-weight: bold;">Arrow Animation:</label>
+                                    <label class="switch" style="margin-left: 10px;">
+                                        <input type="checkbox" id="arrowAnimation" checked>
+                                        <span class="slider round"></span>
+                                    </label>
+                                </div>
+                                <div style="font-size: 12px; color: #666; margin-top: 5px;">
+                                    Enable or disable the arrow drawing animation
+                                </div>
+                            </div>
+
+                            <div style="font-size: 12px; color: #666; margin-top: 15px; font-style: italic;">
+                                Customize the color, style, and animation of the move arrows
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -2725,6 +3005,39 @@ function main() {
                 // Clear any existing highlights and arrows when changing the indicator type
                 myFunctions.clearHighlights();
                 myFunctions.clearArrows();
+
+                // Show/hide arrow customization container based on selection
+                if (this.value === 'arrows') {
+                    $('#arrowCustomizationContainer').slideDown(200);
+                } else {
+                    $('#arrowCustomizationContainer').slideUp(200);
+                }
+            });
+
+            // Add event listeners for the arrow style radio buttons
+            $('input[name="arrowStyle"]').on('change', function() {
+                myVars.arrowStyle = this.value;
+
+                // Clear any existing arrows to apply the new style
+                myFunctions.clearArrows();
+
+                // If we're currently showing a move, redraw it with the new style
+                if (myVars.lastMove && myVars.moveIndicatorType === 'arrows') {
+                    myFunctions.drawArrow(myVars.lastMove.from, myVars.lastMove.to, myVars.persistentHighlights);
+                }
+            });
+
+            // Add event listener for the arrow animation checkbox
+            $('#arrowAnimation').on('change', function() {
+                myVars.arrowAnimation = this.checked;
+
+                // Clear any existing arrows to apply the new animation setting
+                myFunctions.clearArrows();
+
+                // If we're currently showing a move, redraw it with the new animation setting
+                if (myVars.lastMove && myVars.moveIndicatorType === 'arrows') {
+                    myFunctions.drawArrow(myVars.lastMove.from, myVars.lastMove.to, myVars.persistentHighlights);
+                }
             });
 
             // Improved visual feedback for toggle switches
@@ -2953,6 +3266,9 @@ function main() {
             evalBarTheme: $('#evalBarColor').val(),
             whiteAdvantageColor: $('#whiteAdvantageColor').val(),
             blackAdvantageColor: $('#blackAdvantageColor').val(),
+            arrowColor: $('#arrowColor').val(),
+            arrowStyle: $('input[name="arrowStyle"]:checked').val() || 'curved',
+            arrowAnimation: $('#arrowAnimation')[0].checked,
             fusionMode: myVars.fusionMode,
             humanMode: myVars.humanMode ? {
                 active: myVars.humanMode.active,
@@ -3016,6 +3332,9 @@ function main() {
                 myVars.fusionMode = settings.fusionMode !== undefined ? settings.fusionMode : false;
                 myVars.whiteAdvantageColor = settings.whiteAdvantageColor || '#4CAF50';
                 myVars.blackAdvantageColor = settings.blackAdvantageColor || '#F44336';
+                myVars.arrowColor = settings.arrowColor || '#0077CC';
+                myVars.arrowStyle = settings.arrowStyle || 'curved';
+                myVars.arrowAnimation = settings.arrowAnimation !== undefined ? settings.arrowAnimation : true;
 
                 // Set humanMode
                 if (settings.humanMode) {
@@ -3056,6 +3375,13 @@ function main() {
 
                 if ($('input[name="moveIndicatorType"]').length) {
                     $('input[name="moveIndicatorType"][value="' + myVars.moveIndicatorType + '"]').prop('checked', true);
+
+                    // Show/hide arrow customization container based on move indicator type
+                    if (myVars.moveIndicatorType === 'arrows') {
+                        $('#arrowCustomizationContainer').show();
+                    } else {
+                        $('#arrowCustomizationContainer').hide();
+                    }
                 }
 
                 if ($('#humanMode')[0] && myVars.humanMode) {
@@ -3076,6 +3402,24 @@ function main() {
 
                 if ($('#blackAdvantageColor')[0]) {
                     $('#blackAdvantageColor')[0].value = myVars.blackAdvantageColor;
+                }
+
+                if ($('#arrowColor')[0]) {
+                    $('#arrowColor')[0].value = myVars.arrowColor;
+                }
+
+                // Set arrow style radio button
+                if (myVars.arrowStyle) {
+                    if (myVars.arrowStyle === 'curved' && $('#arrowStyleCurved')[0]) {
+                        $('#arrowStyleCurved')[0].checked = true;
+                    } else if (myVars.arrowStyle === 'straight' && $('#arrowStyleStraight')[0]) {
+                        $('#arrowStyleStraight')[0].checked = true;
+                    }
+                }
+
+                // Set arrow animation checkbox
+                if ($('#arrowAnimation')[0]) {
+                    $('#arrowAnimation')[0].checked = myVars.arrowAnimation !== undefined ? myVars.arrowAnimation : true;
                 }
 
                 if (settings.timeDelayMin !== undefined && $('#timeDelayMin')[0]) {
@@ -3149,6 +3493,13 @@ function main() {
 
                 if ($('input[name="moveIndicatorType"]').length) {
                     $('input[name="moveIndicatorType"][value="' + savedMoveIndicatorType + '"]').prop('checked', true);
+
+                    // Show/hide arrow customization container based on move indicator type
+                    if (savedMoveIndicatorType === 'arrows') {
+                        $('#arrowCustomizationContainer').show();
+                    } else {
+                        $('#arrowCustomizationContainer').hide();
+                    }
                 }
 
                 if ($('#humanMode')[0]) {
