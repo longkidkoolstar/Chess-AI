@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Chess AI
 // @namespace    github.com/longkidkoolstar
-// @version      1.0.3
+// @version      1.0.4
 // @description  Chess.com Bot/Cheat that finds the best move with evaluation bar and ELO control!
 // @author       longkidkoolstar
 // @license      none
@@ -595,83 +595,51 @@ function main() {
         evalBar.style.height = `${percentage}%`;
 
         // Update color based on who's winning and the selected color theme
+        let gradientColor;
         if(evalValue > 0.2) {
-            evalBar.style.backgroundColor = myVars.whiteAdvantageColor || '#4CAF50'; // White advantage
+            gradientColor = myVars.whiteAdvantageColor || '#4CAF50'; // White advantage
         } else if(evalValue < -0.2) {
-            evalBar.style.backgroundColor = myVars.blackAdvantageColor || '#F44336'; // Black advantage
+            gradientColor = myVars.blackAdvantageColor || '#F44336'; // Black advantage
         } else {
-            evalBar.style.backgroundColor = '#9E9E9E'; // Grey for equal
+            gradientColor = '#9E9E9E'; // Grey for equal
         }
 
-        // Update evaluation text
+        // Create gradient effect
+        evalBar.style.backgroundImage = `
+            linear-gradient(
+                to bottom,
+                ${gradientColor}dd,
+                ${gradientColor}
+            ),
+            linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px)
+        `;
+
+        // Update evaluation text with improved formatting
         if(mateText) {
-            evalText.textContent = mateText + (depth ? ` (d${depth})` : '');
+            evalText.innerHTML = `<span style="color: #d32f2f">${mateText}</span>${depth ? `<br><span style="font-size: 10px; color: #666">d${depth}</span>` : ''}`;
         } else {
             const sign = evalValue > 0 ? '+' : '';
-            evalText.textContent = `${sign}${evalValue.toFixed(2)}` + (depth ? ` (d${depth})` : '');
+            const evalColor = evalValue > 0.2 ? myVars.whiteAdvantageColor : (evalValue < -0.2 ? myVars.blackAdvantageColor : '#666');
+            evalText.innerHTML = `<span style="color: ${evalColor}">${sign}${Math.abs(evalValue).toFixed(1)}</span>${depth ? `<br><span style="font-size: 10px; color: #666">d${depth}</span>` : ''}`;
         }
 
-        // Add visual indicators for advantage
-        const advantageIndicator = document.getElementById('advantage-indicator');
-        if (!advantageIndicator) {
-            const indicator = document.createElement('div');
-            indicator.id = 'advantage-indicator';
-            indicator.style = `
-                position: absolute;
-                right: 0;
-                width: 100%;
-                text-align: center;
-                font-size: 12px;
-                font-weight: bold;
-                text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
-                pointer-events: none;
-            `;
-            evalBar.parentElement.appendChild(indicator);
-        }
-
-        const indicator = document.getElementById('advantage-indicator');
-
-        // Clear any existing labels
-        while (indicator.firstChild) {
-            indicator.removeChild(indicator.firstChild);
-        }
-
-        // Add advantage labels
-        const addLabel = (position, text, color) => {
-            const label = document.createElement('div');
-            label.textContent = text;
-            label.style = `
-                position: absolute;
-                top: ${position}%;
-                width: 100%;
-                color: ${color};
-                transform: translateY(-50%);
-            `;
-            indicator.appendChild(label);
-        };
-
-        // Add labels for different advantage levels
-        addLabel(0, "Black ++", myVars.blackAdvantageColor || '#F44336');
-        addLabel(25, "Black +", myVars.blackAdvantageColor || '#F44336');
-        addLabel(50, "Equal", '#9E9E9E');
-        addLabel(75, "White +", myVars.whiteAdvantageColor || '#4CAF50');
-        addLabel(100, "White ++", myVars.whiteAdvantageColor || '#4CAF50');
-
-        // Add a marker for current evaluation
-        const marker = document.createElement('div');
-        marker.style = `
-            position: absolute;
-            top: ${percentage}%;
-            left: -15px;
-            width: 0;
-            height: 0;
-            border-top: 6px solid transparent;
-            border-bottom: 6px solid transparent;
-            border-left: 10px solid #FFC107;
-            transform: translateY(-50%);
-        `;
-        indicator.appendChild(marker);
+        // Add visual pulse effect on significant changes
+        evalBar.style.transition = 'height 0.3s ease-in-out, background-color 0.3s ease-in-out';
+        evalBar.style.animation = 'none';
+        evalBar.offsetHeight; // Trigger reflow
+        evalBar.style.animation = 'evalPulse 0.5s ease-in-out';
     }
+
+    // Add pulse animation
+    const pulseAnimation = document.createElement('style');
+    pulseAnimation.textContent = `
+        @keyframes evalPulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+    `;
+    document.head.appendChild(pulseAnimation);
 
     myFunctions.reloadChessEngine = function() {
         console.log(`Reloading the chess engine!`);
@@ -1239,12 +1207,14 @@ function main() {
                 position: absolute;
                 left: -30px;
                 top: 0;
-                width: 20px;
+                width: 24px;
                 height: 100%;
-                background-color: #f0f0f0;
-                border: 1px solid #ccc;
+                background-color: #f8f8f8;
+                border: 1px solid #e0e0e0;
+                border-radius: 4px;
                 overflow: hidden;
                 z-index: 100;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             `;
 
             // Create the actual evaluation bar
@@ -1256,7 +1226,9 @@ function main() {
                 width: 100%;
                 height: 50%;
                 background-color: #9E9E9E;
-                transition: height 0.3s, background-color 0.3s;
+                transition: height 0.3s ease-in-out, background-color 0.3s ease-in-out;
+                background-image: linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px);
+                background-size: 100% 10%;
             `;
 
             // Create evaluation text
@@ -1264,17 +1236,58 @@ function main() {
             evalText.id = 'evalText';
             evalText.style = `
                 position: absolute;
-                top: -25px;
-                width: 100%;
+                top: -30px;
+                left: -5px;
+                width: 34px;
                 text-align: center;
                 font-weight: bold;
-                font-size: 14px;
+                font-size: 13px;
+                color: #333;
+                background-color: rgba(255,255,255,0.9);
+                padding: 4px;
+                border-radius: 4px;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
                 z-index: 101;
+                font-family: 'Roboto Mono', monospace;
             `;
             evalText.textContent = '0.0';
 
+            // Create centipawn scale markers
+            const scaleMarkers = document.createElement('div');
+            scaleMarkers.style = `
+                position: absolute;
+                right: -20px;
+                top: 0;
+                height: 100%;
+                width: 20px;
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
+                font-size: 10px;
+                color: #666;
+                pointer-events: none;
+                font-family: 'Roboto Mono', monospace;
+            `;
+
+            // Add scale markers
+            const markerValues = ['+5', '+3', '+1', '0', '-1', '-3', '-5'];
+            markerValues.forEach((value, index) => {
+                const marker = document.createElement('span');
+                marker.textContent = value;
+                marker.style = `
+                    position: absolute;
+                    right: 0;
+                    top: ${(index / (markerValues.length - 1)) * 100}%;
+                    transform: translateY(-50%);
+                    font-size: 9px;
+                    color: #888;
+                `;
+                scaleMarkers.appendChild(marker);
+            });
+
             // Add elements to the DOM
             evalBarContainer.appendChild(evalBar);
+            evalBarContainer.appendChild(scaleMarkers);
             board.parentElement.style.position = 'relative';
             board.parentElement.appendChild(evalBarContainer);
             board.parentElement.appendChild(evalText);
