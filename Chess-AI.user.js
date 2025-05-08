@@ -1,13 +1,13 @@
 // ==UserScript==
 // @name         Chess AI
 // @namespace    github.com/longkidkoolstar
-// @version      1.0.5
+// @version      1.1.0
 // @description  Chess.com Bot/Cheat that finds the best move with evaluation bar and ELO control!
 // @author       longkidkoolstar
 // @license      none
 // @match        https://www.chess.com/play/*
 // @match        https://www.chess.com/game/*
-// @icon         data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==
+// @icon         https://i.imgur.com/Z30WgSo.png
 // @grant       GM.getValue
 // @grant       GM.setValue
 // @grant       GM.getResourceText
@@ -18,7 +18,7 @@
 // ==/UserScript==
 
 
-const currentVersion = '1.0.5'; // Updated version number
+const currentVersion = '1.1.0'; // Updated version number
 
 function main() {
 
@@ -32,6 +32,17 @@ function main() {
     myVars.currentEvaluation = 0; // Current evaluation value
     myVars.persistentHighlights = true; // Default to persistent highlights
     myVars.moveIndicatorType = 'highlights'; // Default to highlights instead of arrows
+    myVars.showMultipleMoves = false; // Default to showing only the best move
+    myVars.numberOfMovesToShow = 3; // Default number of top moves to show
+    myVars.useMulticolorMoves = false; // Default to using opacity for move strength
+    // Default colors for multicolor mode
+    myVars.moveColors = {
+        1: '#F44336', // Red for best move
+        2: '#FF9800', // Orange for 2nd best
+        3: '#FFEB3B', // Yellow for 3rd best
+        4: '#4CAF50', // Green for 4th best
+        5: '#2196F3'  // Blue for 5th best
+    }
     var myFunctions = document.myFunctions = {};
 
     // Create evaluation bar
@@ -238,13 +249,188 @@ function main() {
         }
         isThinking = false;
 
+        // Store the best move for reference
+        myVars.lastMove = {
+            from: res1,
+            to: res2,
+            algebraic: moveNotation
+        };
+
         // Only show move indicators if the option is enabled
         if(myVars.showArrows !== false) {
-            // Check if player is playing as black
-            const isPlayingAsBlack = board.game.getPlayingAs() === 'black';
+            // Debug information
+            console.log("Multiple moves enabled:", myVars.showMultipleMoves);
+            console.log("Top moves array:", myVars.topMoves);
+
+            // Check if we should show multiple moves
+            if (myVars.showMultipleMoves && myVars.topMoves && myVars.topMoves.length > 1) {
+                console.log("Showing multiple moves:", myVars.topMoves.length);
+                // Show multiple moves with varying opacity
+                myFunctions.showMultipleMoveIndicators();
+            } else {
+                console.log("Showing single move - reason:",
+                    !myVars.showMultipleMoves ? "Multiple moves disabled" :
+                    !myVars.topMoves ? "No top moves array" :
+                    myVars.topMoves.length <= 1 ? "Not enough moves in array" : "Unknown");
+                // Show just the best move (original behavior)
+                myFunctions.showSingleMoveIndicator(res1, res2);
+            }
+        }
+    }
+
+    // Function to show a single move indicator (original behavior)
+    myFunctions.showSingleMoveIndicator = function(res1, res2) {
+        // Check if player is playing as black
+        const isPlayingAsBlack = board.game.getPlayingAs() === 'black';
+
+        // Convert algebraic notation to numeric coordinates
+        // The conversion depends on whether we're playing as white or black
+        let fromSquare, toSquare;
+
+        if (isPlayingAsBlack) {
+            // Inverted mapping for black perspective
+            fromSquare = res1.replace(/^a/, "8")
+                .replace(/^b/, "7")
+                .replace(/^c/, "6")
+                .replace(/^d/, "5")
+                .replace(/^e/, "4")
+                .replace(/^f/, "3")
+                .replace(/^g/, "2")
+                .replace(/^h/, "1");
+            toSquare = res2.replace(/^a/, "8")
+                .replace(/^b/, "7")
+                .replace(/^c/, "6")
+                .replace(/^d/, "5")
+                .replace(/^e/, "4")
+                .replace(/^f/, "3")
+                .replace(/^g/, "2")
+                .replace(/^h/, "1");
+        } else {
+            // Standard mapping for white perspective
+            fromSquare = res1.replace(/^a/, "1")
+                .replace(/^b/, "2")
+                .replace(/^c/, "3")
+                .replace(/^d/, "4")
+                .replace(/^e/, "5")
+                .replace(/^f/, "6")
+                .replace(/^g/, "7")
+                .replace(/^h/, "8");
+            toSquare = res2.replace(/^a/, "1")
+                .replace(/^b/, "2")
+                .replace(/^c/, "3")
+                .replace(/^d/, "4")
+                .replace(/^e/, "5")
+                .replace(/^f/, "6")
+                .replace(/^g/, "7")
+                .replace(/^h/, "8");
+        }
+
+        // Use arrows or highlights based on user preference
+        if (myVars.moveIndicatorType === 'arrows') {
+            // Draw an arrow from the source to the destination square
+            // Pass the converted square coordinates to ensure consistency with highlights
+            myFunctions.drawArrow(fromSquare, toSquare, myVars.persistentHighlights);
+        } else {
+            // Use the original highlighting method
+            if (myVars.persistentHighlights) {
+                // Add highlights with custom class for easier removal later
+                $(board.nodeName)
+                    .prepend('<div class="highlight square-' + toSquare + ' bro persistent-highlight" style="background-color: rgb(235, 97, 80); opacity: 0.71;" data-test-element="highlight"></div>');
+
+                $(board.nodeName)
+                    .prepend('<div class="highlight square-' + fromSquare + ' bro persistent-highlight" style="background-color: rgb(235, 97, 80); opacity: 0.71;" data-test-element="highlight"></div>');
+            } else {
+                // Use the original temporary highlights
+                $(board.nodeName)
+                    .prepend('<div class="highlight square-' + toSquare + ' bro" style="background-color: rgb(235, 97, 80); opacity: 0.71;" data-test-element="highlight"></div>')
+                    .children(':first')
+                    .delay(1800)
+                    .queue(function() {
+                    $(this)
+                        .remove();
+                });
+
+                $(board.nodeName)
+                    .prepend('<div class="highlight square-' + fromSquare + ' bro" style="background-color: rgb(235, 97, 80); opacity: 0.71;" data-test-element="highlight"></div>')
+                    .children(':first')
+                    .delay(1800)
+                    .queue(function() {
+                    $(this)
+                        .remove();
+                });
+            }
+        }
+    }
+
+    // Function to show multiple move indicators with varying opacity or colors
+    myFunctions.showMultipleMoveIndicators = function() {
+        // Limit to the number of moves specified in settings
+        const movesToShow = Math.min(myVars.numberOfMovesToShow, myVars.topMoves.length);
+
+        console.log("Showing multiple moves:", movesToShow, "out of", myVars.topMoves.length, "available");
+        console.log("Using multicolor mode:", myVars.useMulticolorMoves);
+
+        // Get the best evaluation for normalization
+        const bestEval = myVars.topMoves[0].evaluation;
+
+        // Check if player is playing as black
+        const isPlayingAsBlack = board.game.getPlayingAs() === 'black';
+
+        // Show each move with opacity based on relative strength or different colors
+        for (let i = 0; i < movesToShow; i++) {
+            const moveInfo = myVars.topMoves[i];
+            const move = moveInfo.move;
+
+            // Skip if move is undefined
+            if (!move) continue;
+
+            const res1 = move.substring(0, 2);
+            const res2 = move.substring(2, 4);
+
+            // Variables for styling
+            let opacity = 0.9;
+            let moveColor = null;
+
+            if (myVars.useMulticolorMoves) {
+                // Use different colors for each move
+                // Get the color from settings, or use default if not set
+                moveColor = myVars.moveColors[i + 1] || getDefaultMoveColor(i);
+
+                // Use full opacity for multicolor mode
+                opacity = 0.9;
+            } else {
+                // Calculate opacity based on relative strength
+                // Best move gets 0.9 opacity, others get progressively lower
+                if (i > 0) {
+                    // For non-mate positions, calculate relative strength
+                    if (!moveInfo.isMate && !myVars.topMoves[0].isMate) {
+                        // Calculate relative strength (0.0 to 1.0)
+                        const relativeStrength = Math.max(0, 1 - Math.abs(bestEval - moveInfo.evaluation) / 3);
+                        // Scale opacity from 0.3 to 0.9 based on strength
+                        opacity = 0.3 + (relativeStrength * 0.6);
+                    } else {
+                        // For mate positions, use fixed opacity values
+                        opacity = 0.9 - (i * 0.15);
+                    }
+                }
+
+                // Ensure opacity is within reasonable bounds
+                opacity = Math.max(0.3, Math.min(0.9, opacity));
+            }
+
+            // Helper function to get default color for a move index
+            function getDefaultMoveColor(index) {
+                const defaultColors = [
+                    '#F44336', // Red for best move
+                    '#FF9800', // Orange for 2nd best
+                    '#FFEB3B', // Yellow for 3rd best
+                    '#4CAF50', // Green for 4th best
+                    '#2196F3'  // Blue for 5th best
+                ];
+                return defaultColors[index] || '#9C27B0'; // Default to purple if out of range
+            }
 
             // Convert algebraic notation to numeric coordinates
-            // The conversion depends on whether we're playing as white or black
             let fromSquare, toSquare;
 
             if (isPlayingAsBlack) {
@@ -285,24 +471,46 @@ function main() {
                     .replace(/^h/, "8");
             }
 
+            // Get the color to use (either from multicolor settings or default)
+            let highlightColor = 'rgb(235, 97, 80)'; // Default red color
+
+            if (myVars.useMulticolorMoves) {
+                // Convert hex color to RGB for highlights
+                const moveColor = myVars.moveColors[i + 1] || getDefaultMoveColor(i);
+                highlightColor = hexToRgb(moveColor);
+            }
+
+            // Helper function to convert hex color to RGB format
+            function hexToRgb(hex) {
+                // Remove # if present
+                hex = hex.replace('#', '');
+
+                // Parse the hex values
+                const r = parseInt(hex.substring(0, 2), 16);
+                const g = parseInt(hex.substring(2, 4), 16);
+                const b = parseInt(hex.substring(4, 6), 16);
+
+                // Return RGB format
+                return `rgb(${r}, ${g}, ${b})`;
+            }
+
             // Use arrows or highlights based on user preference
             if (myVars.moveIndicatorType === 'arrows') {
-                // Draw an arrow from the source to the destination square
-                // Pass the converted square coordinates to ensure consistency with highlights
-                myFunctions.drawArrow(fromSquare, toSquare, myVars.persistentHighlights);
+                // Draw an arrow with the calculated opacity and color
+                myFunctions.drawArrow(fromSquare, toSquare, myVars.persistentHighlights, opacity, myVars.useMulticolorMoves ? myVars.moveColors[i + 1] : null);
             } else {
-                // Use the original highlighting method
+                // Use highlighting with the calculated opacity and color
                 if (myVars.persistentHighlights) {
                     // Add highlights with custom class for easier removal later
                     $(board.nodeName)
-                        .prepend('<div class="highlight square-' + toSquare + ' bro persistent-highlight" style="background-color: rgb(235, 97, 80); opacity: 0.71;" data-test-element="highlight"></div>');
+                        .prepend('<div class="highlight square-' + toSquare + ' bro persistent-highlight" style="background-color: ' + highlightColor + '; opacity: ' + opacity + ';" data-test-element="highlight"></div>');
 
                     $(board.nodeName)
-                        .prepend('<div class="highlight square-' + fromSquare + ' bro persistent-highlight" style="background-color: rgb(235, 97, 80); opacity: 0.71;" data-test-element="highlight"></div>');
+                        .prepend('<div class="highlight square-' + fromSquare + ' bro persistent-highlight" style="background-color: ' + highlightColor + '; opacity: ' + opacity + ';" data-test-element="highlight"></div>');
                 } else {
-                    // Use the original temporary highlights
+                    // Use temporary highlights with the calculated opacity and color
                     $(board.nodeName)
-                        .prepend('<div class="highlight square-' + toSquare + ' bro" style="background-color: rgb(235, 97, 80); opacity: 0.71;" data-test-element="highlight"></div>')
+                        .prepend('<div class="highlight square-' + toSquare + ' bro" style="background-color: ' + highlightColor + '; opacity: ' + opacity + ';" data-test-element="highlight"></div>')
                         .children(':first')
                         .delay(1800)
                         .queue(function() {
@@ -311,7 +519,7 @@ function main() {
                     });
 
                     $(board.nodeName)
-                        .prepend('<div class="highlight square-' + fromSquare + ' bro" style="background-color: rgb(235, 97, 80); opacity: 0.71;" data-test-element="highlight"></div>')
+                        .prepend('<div class="highlight square-' + fromSquare + ' bro" style="background-color: ' + highlightColor + '; opacity: ' + opacity + ';" data-test-element="highlight"></div>')
                         .children(':first')
                         .delay(1800)
                         .queue(function() {
@@ -336,11 +544,17 @@ function main() {
     }
 
     // Function to draw an arrow on the chess board
-    myFunctions.drawArrow = function(fromSquare, toSquare, isPersistent) {
+    myFunctions.drawArrow = function(fromSquare, toSquare, isPersistent, customOpacity, customColor) {
         // Get the board element and its dimensions
         const boardElement = $(board.nodeName)[0];
         const boardRect = boardElement.getBoundingClientRect();
         const squareSize = boardRect.width / 8;
+
+        // Use provided opacity or default
+        const arrowOpacity = customOpacity !== undefined ? customOpacity : 0.9;
+
+        // Use provided color or default
+        const arrowColor = customColor || myVars.arrowColor || "#0077CC";
 
         // Create a temporary highlight to find the square position
         // This is a reliable way to get the correct position regardless of board orientation
@@ -388,10 +602,7 @@ function main() {
         const angle = Math.atan2(dy, dx);
         const length = Math.sqrt(dx * dx + dy * dy);
 
-        // Get arrow color - use custom colors if defined, otherwise use default
-        // Chess.com-like blue with slightly improved saturation
-        const arrowColor = myVars.arrowColor || "#0077CC";
-        const arrowOpacity = 0.9;
+        // Note: arrowColor is now defined at the top of the function
 
         // Adjust start and end points to not cover the pieces
         const margin = squareSize * 0.3;
@@ -698,16 +909,88 @@ function main() {
     }
 
     function parser(e){
-        // Store alternative moves for human-like play
+        // Store alternative moves for human-like play and multiple move suggestions
         if(e.data.includes('info') && e.data.includes('pv') && !e.data.includes('bestmove')) {
             try {
                 // Extract the move from the principal variation (pv)
                 const parts = e.data.split(' ');
                 const pvIndex = parts.indexOf('pv');
+                const cpIndex = parts.indexOf('cp');
+                const mateIndex = parts.indexOf('mate');
+                const depthIndex = parts.indexOf('depth');
+                const multipvIndex = parts.indexOf('multipv');
+
+                // Debug the raw engine output to understand what we're getting
+                console.log("Engine output:", e.data);
+
                 if(pvIndex !== -1 && parts[pvIndex + 1]) {
                     const move = parts[pvIndex + 1];
 
-                    // Store this move as an alternative
+                    // Get evaluation for this move
+                    let evaluation = 0;
+                    let isMate = false;
+                    let mateIn = 0;
+
+                    if (cpIndex !== -1 && parts[cpIndex + 1]) {
+                        evaluation = parseInt(parts[cpIndex + 1]) / 100; // Convert centipawns to pawns
+                    } else if (mateIndex !== -1 && parts[mateIndex + 1]) {
+                        isMate = true;
+                        mateIn = parseInt(parts[mateIndex + 1]);
+                        // Use a large value for mate
+                        evaluation = mateIn > 0 ? 20 : -20;
+                    }
+
+                    // Get depth for this move
+                    let depth = 0;
+                    if (depthIndex !== -1 && parts[depthIndex + 1]) {
+                        depth = parseInt(parts[depthIndex + 1]);
+                    }
+
+                    // Get multipv index if available (for multiple move analysis)
+                    let multipvValue = 1; // Default to 1 if not specified
+                    if (multipvIndex !== -1 && parts[multipvIndex + 1]) {
+                        multipvValue = parseInt(parts[multipvIndex + 1]);
+                    }
+
+                    // Initialize topMoves array if it doesn't exist
+                    if (!myVars.topMoves) {
+                        myVars.topMoves = [];
+                    }
+
+                    // Create move info object
+                    const moveInfo = {
+                        move: move,
+                        evaluation: evaluation,
+                        isMate: isMate,
+                        mateIn: mateIn,
+                        depth: depth,
+                        multipv: multipvValue
+                    };
+
+                    // Check if this move is already in the list
+                    const existingIndex = myVars.topMoves.findIndex(m => m.move === move);
+
+                    if (existingIndex !== -1) {
+                        // Update existing move info
+                        myVars.topMoves[existingIndex] = moveInfo;
+                    } else {
+                        // Add new move info
+                        myVars.topMoves.push(moveInfo);
+                    }
+
+                    // Sort moves by evaluation (best first)
+                    myVars.topMoves.sort((a, b) => b.evaluation - a.evaluation);
+
+                    // Keep only the top N moves
+                    if (myVars.topMoves.length > 5) {
+                        myVars.topMoves = myVars.topMoves.slice(0, 5);
+                    }
+
+                    // Debug info
+                    console.log("Added/updated move in topMoves:", move, "Eval:", evaluation, "Total moves:", myVars.topMoves.length);
+                    console.log("Current topMoves:", JSON.stringify(myVars.topMoves));
+
+                    // Also store for human-like play (backward compatibility)
                     if(!myVars.alternativeMoves) {
                         myVars.alternativeMoves = [];
                     }
@@ -725,6 +1008,7 @@ function main() {
         if(e.data.includes('bestmove')){
             const bestMove = e.data.split(' ')[1];
             console.log('Best move:', bestMove);
+            console.log('Top moves before reset:', myVars.topMoves ? myVars.topMoves.length : 0);
 
             // If human mode is active, simulate human play
             if(myVars.humanMode && myVars.humanMode.active && myVars.alternativeMoves && myVars.alternativeMoves.length > 0) {
@@ -771,8 +1055,10 @@ function main() {
                     myFunctions.updateAutoRunStatus('on');
                 }
 
-                // Reset alternative moves for next turn
+                // Reset alternative moves and top moves for next turn
                 myVars.alternativeMoves = [];
+                myVars.topMoves = [];
+                console.log('Top moves reset to empty array');
             }
         }
         // Parse evaluation information
@@ -906,6 +1192,13 @@ function main() {
             };
 
             engine.engine.postMessage('ucinewgame');
+
+            // Set MultiPV mode if multiple moves are enabled
+            if (myVars.showMultipleMoves) {
+                const multipvValue = myVars.numberOfMovesToShow || 3;
+                console.log("Initializing engine with MultiPV:", multipvValue);
+                engine.engine.postMessage(`setoption name MultiPV value ${multipvValue}`);
+            }
 
             // Set ELO if specified
             if (myVars.eloRating) {
@@ -1282,6 +1575,21 @@ function main() {
         if (myVars.maxDepthForElo !== undefined && depth > myVars.maxDepthForElo) {
             depth = myVars.maxDepthForElo;
             console.log(`Depth limited to ${depth} based on current ELO setting`);
+        }
+
+        // Reset topMoves array before starting a new analysis
+        myVars.topMoves = [];
+        console.log("Reset topMoves array before analysis");
+
+        // Set MultiPV mode if multiple moves are enabled
+        if (myVars.showMultipleMoves) {
+            const multipvValue = myVars.numberOfMovesToShow || 3;
+            console.log("Setting MultiPV to", multipvValue);
+            engine.engine.postMessage(`setoption name MultiPV value ${multipvValue}`);
+        } else {
+            // Reset to single PV mode
+            console.log("Setting MultiPV to 1 (single move mode)");
+            engine.engine.postMessage(`setoption name MultiPV value 1`);
         }
 
         //var fen = myFunctions.rescan();
@@ -2051,6 +2359,7 @@ function main() {
 
                         <!-- Arrow Color Customization -->
                         <div id="arrowCustomizationContainer" style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px; display: none;">
+                            <div id="arrowCustomizationSection">
                             <label style="display: block; margin-bottom: 8px; font-weight: bold;">Arrow Customization:</label>
                             <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px;">
                                 <label for="arrowColor">Arrow Color:</label>
@@ -2087,6 +2396,69 @@ function main() {
 
                             <div style="font-size: 12px; color: #666; margin-top: 15px; font-style: italic;">
                                 Customize the color, style, and animation of the move arrows
+                            </div>
+                            </div><!-- End of arrowCustomizationSection -->
+                        </div>
+
+                        <!-- Multiple Move Suggestions -->
+                        <div style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px;">
+                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+                                <label for="showMultipleMoves" style="font-weight: bold;">Show Multiple Moves:</label>
+                                <label class="switch" style="margin-left: 10px;">
+                                    <input type="checkbox" id="showMultipleMoves">
+                                    <span class="slider round"></span>
+                                </label>
+                                <span id="showMultipleMovesStatus" style="margin-left: 10px; font-size: 12px; color: #666;">Off</span>
+                            </div>
+                            <div style="font-size: 12px; color: #666; margin-bottom: 15px;">
+                                Show top 3-5 moves instead of just the best move
+                            </div>
+
+                            <div id="multipleMovesOptions" style="display: none; margin-top: 10px; padding: 10px; background-color: #f8f8f8; border-radius: 4px;">
+                                <label for="numberOfMovesToShow" style="display: block; margin-bottom: 8px;">Number of moves to show:</label>
+                                <div style="display: flex; align-items: center; gap: 10px;">
+                                    <input type="range" id="numberOfMovesToShow" min="2" max="5" value="3" style="flex: 1;">
+                                    <span id="numberOfMovesValue" style="min-width: 20px; text-align: center;">3</span>
+                                </div>
+
+                                <!-- Multicolor option -->
+                                <div style="margin-top: 15px; border-top: 1px solid #ddd; padding-top: 15px;">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+                                        <label for="useMulticolorMoves" style="font-weight: bold;">Use different colors:</label>
+                                        <label class="switch" style="margin-left: 10px;">
+                                            <input type="checkbox" id="useMulticolorMoves">
+                                            <span class="slider round"></span>
+                                        </label>
+                                        <span id="useMulticolorMovesStatus" style="margin-left: 10px; font-size: 12px; color: #666;">Off</span>
+                                    </div>
+                                    <div style="font-size: 12px; color: #666; margin-bottom: 15px;">
+                                        Use different colors for each move instead of varying opacity
+                                    </div>
+
+                                    <!-- Color pickers for each move -->
+                                    <div id="moveColorOptions" style="display: none; margin-top: 10px;">
+                                        <div style="display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center;">
+                                            <label for="moveColor1" style="font-size: 12px;">Best move:</label>
+                                            <input type="color" id="moveColor1" value="#F44336" style="width: 100%;">
+
+                                            <label for="moveColor2" style="font-size: 12px;">2nd best:</label>
+                                            <input type="color" id="moveColor2" value="#FF9800" style="width: 100%;">
+
+                                            <label for="moveColor3" style="font-size: 12px;">3rd best:</label>
+                                            <input type="color" id="moveColor3" value="#FFEB3B" style="width: 100%;">
+
+                                            <label for="moveColor4" style="font-size: 12px;">4th best:</label>
+                                            <input type="color" id="moveColor4" value="#4CAF50" style="width: 100%;">
+
+                                            <label for="moveColor5" style="font-size: 12px;">5th best:</label>
+                                            <input type="color" id="moveColor5" value="#2196F3" style="width: 100%;">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div id="opacityNote" style="font-size: 12px; color: #666; margin-top: 8px; font-style: italic;">
+                                    Opacity of move indicators will reflect move strength
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -3040,6 +3412,84 @@ function main() {
                 }
             });
 
+            // Add event listener for the multiple moves toggle
+            $('#showMultipleMoves').on('change', function() {
+                myVars.showMultipleMoves = this.checked;
+
+                // Update status text
+                $('#showMultipleMovesStatus').text(this.checked ? 'On' : 'Off');
+                $('#showMultipleMovesStatus').css('color', this.checked ? '#4CAF50' : '#666');
+
+                // Show/hide options
+                if (this.checked) {
+                    $('#multipleMovesOptions').slideDown(200);
+
+                    // If multicolor is enabled, hide arrow customization
+                    if (myVars.useMulticolorMoves) {
+                        $('#arrowCustomizationSection').slideUp(200);
+                    }
+                } else {
+                    $('#multipleMovesOptions').slideUp(200);
+
+                    // Always show arrow customization when multiple moves is disabled
+                    $('#arrowCustomizationSection').slideDown(200);
+                }
+
+                // Clear any existing highlights and arrows
+                myFunctions.clearHighlights();
+                myFunctions.clearArrows();
+            });
+
+            // Add event listener for the number of moves slider
+            $('#numberOfMovesToShow').on('input', function() {
+                const value = $(this).val();
+                $('#numberOfMovesValue').text(value);
+                myVars.numberOfMovesToShow = parseInt(value);
+
+                // Clear any existing highlights and arrows
+                myFunctions.clearHighlights();
+                myFunctions.clearArrows();
+            });
+
+            // Add event listener for the multicolor moves toggle
+            $('#useMulticolorMoves').on('change', function() {
+                myVars.useMulticolorMoves = this.checked;
+
+                // Update status text
+                $('#useMulticolorMovesStatus').text(this.checked ? 'On' : 'Off');
+                $('#useMulticolorMovesStatus').css('color', this.checked ? '#4CAF50' : '#666');
+
+                // Show/hide color pickers
+                if (this.checked) {
+                    $('#moveColorOptions').slideDown(200);
+                    $('#opacityNote').hide();
+
+                    // Hide arrow customization section when multicolor is enabled
+                    $('#arrowCustomizationSection').slideUp(200);
+                } else {
+                    $('#moveColorOptions').slideUp(200);
+                    $('#opacityNote').show();
+
+                    // Show arrow customization section when multicolor is disabled
+                    $('#arrowCustomizationSection').slideDown(200);
+                }
+
+                // Clear any existing highlights and arrows
+                myFunctions.clearHighlights();
+                myFunctions.clearArrows();
+            });
+
+            // Add event listeners for the color pickers
+            for (let i = 1; i <= 5; i++) {
+                $(`#moveColor${i}`).on('change', function() {
+                    myVars.moveColors[i] = $(this).val();
+
+                    // Clear any existing highlights and arrows
+                    myFunctions.clearHighlights();
+                    myFunctions.clearArrows();
+                });
+            }
+
             // Improved visual feedback for toggle switches
             $('.switch input[type="checkbox"]').each(function() {
                 const statusElement = $('#' + this.id + 'Status');
@@ -3269,6 +3719,16 @@ function main() {
             arrowColor: $('#arrowColor').val(),
             arrowStyle: $('input[name="arrowStyle"]:checked').val() || 'curved',
             arrowAnimation: $('#arrowAnimation')[0].checked,
+            showMultipleMoves: $('#showMultipleMoves')[0].checked,
+            numberOfMovesToShow: parseInt($('#numberOfMovesToShow')[0].value),
+            useMulticolorMoves: $('#useMulticolorMoves')[0].checked,
+            moveColors: {
+                1: $('#moveColor1').val() || '#F44336',
+                2: $('#moveColor2').val() || '#FF9800',
+                3: $('#moveColor3').val() || '#FFEB3B',
+                4: $('#moveColor4').val() || '#4CAF50',
+                5: $('#moveColor5').val() || '#2196F3'
+            },
             fusionMode: myVars.fusionMode,
             humanMode: myVars.humanMode ? {
                 active: myVars.humanMode.active,
@@ -3335,6 +3795,20 @@ function main() {
                 myVars.arrowColor = settings.arrowColor || '#0077CC';
                 myVars.arrowStyle = settings.arrowStyle || 'curved';
                 myVars.arrowAnimation = settings.arrowAnimation !== undefined ? settings.arrowAnimation : true;
+                myVars.showMultipleMoves = settings.showMultipleMoves !== undefined ? settings.showMultipleMoves : false;
+                myVars.numberOfMovesToShow = settings.numberOfMovesToShow || 3;
+                myVars.useMulticolorMoves = settings.useMulticolorMoves !== undefined ? settings.useMulticolorMoves : false;
+
+                // Load move colors if they exist
+                if (settings.moveColors) {
+                    myVars.moveColors = {
+                        1: settings.moveColors[1] || '#F44336',
+                        2: settings.moveColors[2] || '#FF9800',
+                        3: settings.moveColors[3] || '#FFEB3B',
+                        4: settings.moveColors[4] || '#4CAF50',
+                        5: settings.moveColors[5] || '#2196F3'
+                    };
+                }
 
                 // Set humanMode
                 if (settings.humanMode) {
@@ -3420,6 +3894,53 @@ function main() {
                 // Set arrow animation checkbox
                 if ($('#arrowAnimation')[0]) {
                     $('#arrowAnimation')[0].checked = myVars.arrowAnimation !== undefined ? myVars.arrowAnimation : true;
+                }
+
+                // Set multiple moves toggle
+                if ($('#showMultipleMoves')[0]) {
+                    $('#showMultipleMoves')[0].checked = myVars.showMultipleMoves;
+                    $('#showMultipleMovesStatus').text(myVars.showMultipleMoves ? 'On' : 'Off');
+                    $('#showMultipleMovesStatus').css('color', myVars.showMultipleMoves ? '#4CAF50' : '#666');
+
+                    if (myVars.showMultipleMoves) {
+                        $('#multipleMovesOptions').show();
+                    } else {
+                        $('#multipleMovesOptions').hide();
+                    }
+                }
+
+                // Set number of moves slider
+                if ($('#numberOfMovesToShow')[0]) {
+                    $('#numberOfMovesToShow')[0].value = myVars.numberOfMovesToShow;
+                    $('#numberOfMovesValue').text(myVars.numberOfMovesToShow);
+                }
+
+                // Set multicolor moves toggle
+                if ($('#useMulticolorMoves')[0]) {
+                    $('#useMulticolorMoves')[0].checked = myVars.useMulticolorMoves;
+                    $('#useMulticolorMovesStatus').text(myVars.useMulticolorMoves ? 'On' : 'Off');
+                    $('#useMulticolorMovesStatus').css('color', myVars.useMulticolorMoves ? '#4CAF50' : '#666');
+
+                    if (myVars.useMulticolorMoves) {
+                        $('#moveColorOptions').show();
+                        $('#opacityNote').hide();
+                        // Hide arrow customization section when multicolor is enabled
+                        $('#arrowCustomizationSection').hide();
+                    } else {
+                        $('#moveColorOptions').hide();
+                        $('#opacityNote').show();
+                        // Show arrow customization section when multicolor is disabled
+                        $('#arrowCustomizationSection').show();
+                    }
+                }
+
+                // Set color pickers
+                if (myVars.moveColors) {
+                    for (let i = 1; i <= 5; i++) {
+                        if ($(`#moveColor${i}`)[0] && myVars.moveColors[i]) {
+                            $(`#moveColor${i}`)[0].value = myVars.moveColors[i];
+                        }
+                    }
                 }
 
                 if (settings.timeDelayMin !== undefined && $('#timeDelayMin')[0]) {
