@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Chess AI
 // @namespace    github.com/longkidkoolstar
-// @version      1.1.0
+// @version      1.1.1
 // @description  Chess.com Bot/Cheat that finds the best move with evaluation bar and ELO control!
 // @author       longkidkoolstar
 // @license      none
@@ -18,7 +18,7 @@
 // ==/UserScript==
 
 
-const currentVersion = '1.1.0'; // Updated version number
+const currentVersion = '1.1.1'; // Updated version number
 
 function main() {
 
@@ -1109,53 +1109,102 @@ function main() {
         }
     }
 
-    // Function to update the evaluation bar
+    // Function to update the evaluation bar (chess.com style)
     function updateEvalBar(evalValue, mateText = null, depth = '') {
         if(!evalBar || !evalText) return;
+
+        // Store the current evaluation for reference
+        myVars.currentEvaluation = evalValue;
 
         // Clamp the visual representation between -5 and 5
         const clampedEval = Math.max(-5, Math.min(5, evalValue));
         const percentage = 50 + (clampedEval * 10); // Convert to percentage (0-100)
 
+        // Smoothly animate the height change
         evalBar.style.height = `${percentage}%`;
 
-        // Update color based on who's winning and the selected color theme
+        // Update color based on who's winning with smoother gradients
+        let whiteColor = myVars.whiteAdvantageColor || '#4CAF50'; // White advantage
+        let blackColor = myVars.blackAdvantageColor || '#F44336'; // Black advantage
+        let neutralColor = '#9E9E9E'; // Grey for equal
+
+        // Determine the color based on advantage
         let gradientColor;
+        let textColor;
+
         if(evalValue > 0.2) {
-            gradientColor = myVars.whiteAdvantageColor || '#4CAF50'; // White advantage
+            // White advantage - stronger color for bigger advantage
+            const intensity = Math.min(1, Math.abs(evalValue) / 5); // Scale from 0 to 1 based on advantage
+            gradientColor = whiteColor;
+            textColor = whiteColor;
+            // Apply intensity to make stronger advantages more vibrant
+            evalBar.style.opacity = 0.7 + (intensity * 0.3);
         } else if(evalValue < -0.2) {
-            gradientColor = myVars.blackAdvantageColor || '#F44336'; // Black advantage
+            // Black advantage - stronger color for bigger advantage
+            const intensity = Math.min(1, Math.abs(evalValue) / 5); // Scale from 0 to 1 based on advantage
+            gradientColor = blackColor;
+            textColor = blackColor;
+            // Apply intensity to make stronger advantages more vibrant
+            evalBar.style.opacity = 0.7 + (intensity * 0.3);
         } else {
-            gradientColor = '#9E9E9E'; // Grey for equal
+            // Near equal position
+            gradientColor = neutralColor;
+            textColor = '#FFFFFF';
+            evalBar.style.opacity = 1;
         }
 
-        // Create gradient effect
+        // Create chess.com-like gradient effect with subtle patterns
         evalBar.style.backgroundImage = `
             linear-gradient(
                 to bottom,
-                ${gradientColor}dd,
+                ${gradientColor}ee,
                 ${gradientColor}
             ),
-            linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px)
+            linear-gradient(to bottom, rgba(255,255,255,0.1), rgba(255,255,255,0.05)),
+            linear-gradient(rgba(255,255,255,0.15) 1px, transparent 1px)
         `;
+        evalBar.style.backgroundSize = '100% 100%, 100% 100%, 100% 5%';
 
-        // Update evaluation text with improved formatting
+        // Add subtle shadow at the top edge for depth effect
+        evalBar.style.boxShadow = 'inset 0 1px 0 rgba(255,255,255,0.15)';
+
+        // Update evaluation text with chess.com-like formatting
         if(mateText) {
-            evalText.innerHTML = `<span style="color: #d32f2f">${mateText}</span>${depth ? `<br><span style="font-size: 10px; color: #666">d${depth}</span>` : ''}`;
+            // Mate situation
+            const mateColor = evalValue > 0 ? whiteColor : blackColor;
+            evalText.innerHTML = `<span style="color: ${mateColor}">${mateText}</span>${depth ? `<br><span style="font-size: 10px; color: rgba(255,255,255,0.7)">d${depth}</span>` : ''}`;
+            evalText.style.backgroundColor = '#2a2a2a';
         } else {
+            // Normal evaluation
             const sign = evalValue > 0 ? '+' : '';
-            const evalColor = evalValue > 0.2 ? myVars.whiteAdvantageColor : (evalValue < -0.2 ? myVars.blackAdvantageColor : '#666');
-            evalText.innerHTML = `<span style="color: ${evalColor}">${sign}${Math.abs(evalValue).toFixed(1)}</span>${depth ? `<br><span style="font-size: 10px; color: #666">d${depth}</span>` : ''}`;
+            evalText.innerHTML = `<span style="color: ${textColor}">${sign}${Math.abs(evalValue).toFixed(1)}</span>${depth ? `<br><span style="font-size: 10px; color: rgba(255,255,255,0.7)">d${depth}</span>` : ''}`;
+
+            // Change background color based on advantage (subtle effect)
+            if(Math.abs(evalValue) > 3) {
+                // Strong advantage - highlight the evaluation text
+                evalText.style.backgroundColor = evalValue > 0 ? 'rgba(76, 175, 80, 0.2)' : 'rgba(244, 67, 54, 0.2)';
+                evalText.style.boxShadow = `0 2px 6px ${evalValue > 0 ? 'rgba(76, 175, 80, 0.3)' : 'rgba(244, 67, 54, 0.3)'}`;
+            } else {
+                // Normal advantage
+                evalText.style.backgroundColor = '#2a2a2a';
+                evalText.style.boxShadow = '0 2px 6px rgba(0,0,0,0.3)';
+            }
         }
 
         // Add visual pulse effect on significant changes
-        evalBar.style.transition = 'height 0.3s ease-in-out, background-color 0.3s ease-in-out';
-        evalBar.style.animation = 'none';
-        evalBar.offsetHeight; // Trigger reflow
-        evalBar.style.animation = 'evalPulse 0.5s ease-in-out';
+        const previousEval = myVars.previousEvaluation || 0;
+        if(Math.abs(evalValue - previousEval) > 0.5) {
+            // Significant change detected - add pulse animation
+            evalBar.style.animation = 'none';
+            evalBar.offsetHeight; // Trigger reflow
+            evalBar.style.animation = 'evalPulse 0.5s ease-in-out';
+        }
+
+        // Store current evaluation for next comparison
+        myVars.previousEvaluation = evalValue;
     }
 
-    // Add pulse animation
+    // Add enhanced pulse animation
     const pulseAnimation = document.createElement('style');
     pulseAnimation.textContent = `
         @keyframes evalPulse {
@@ -1747,7 +1796,7 @@ function main() {
             board = $('chess-board')[0] || $('wc-chess-board')[0];
             myVars.board = board;
 
-            // Create evaluation bar container
+            // Create evaluation bar container with chess.com-like styling
             var evalBarContainer = document.createElement('div');
             evalBarContainer.id = 'evalBarContainer';
             evalBarContainer.style = `
@@ -1756,15 +1805,15 @@ function main() {
                 top: 0;
                 width: 24px;
                 height: 100%;
-                background-color: #f8f8f8;
-                border: 1px solid #e0e0e0;
-                border-radius: 4px;
+                background-color: #2a2a2a;
+                border: none;
+                border-radius: 3px;
                 overflow: hidden;
                 z-index: 100;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                box-shadow: 0 2px 8px rgba(0,0,0,0.2);
             `;
 
-            // Create the actual evaluation bar
+            // Create the actual evaluation bar with improved styling
             evalBar = document.createElement('div');
             evalBar.id = 'evalBar';
             evalBar.style = `
@@ -1773,12 +1822,26 @@ function main() {
                 width: 100%;
                 height: 50%;
                 background-color: #9E9E9E;
-                transition: height 0.3s ease-in-out, background-color 0.3s ease-in-out;
-                background-image: linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px);
-                background-size: 100% 10%;
+                transition: height 0.25s cubic-bezier(0.4, 0.0, 0.2, 1), background-color 0.25s ease;
+                background-image:
+                    linear-gradient(to bottom, rgba(255,255,255,0.1), rgba(255,255,255,0.05)),
+                    linear-gradient(rgba(255,255,255,0.15) 1px, transparent 1px);
+                background-size: 100% 100%, 100% 5%;
+                box-shadow: inset 0 1px 0 rgba(255,255,255,0.1);
             `;
 
-            // Create evaluation text
+            // Create a center line for the evaluation bar
+            const centerLine = document.createElement('div');
+            centerLine.style = `
+                position: absolute;
+                top: 50%;
+                width: 100%;
+                height: 1px;
+                background-color: rgba(255,255,255,0.3);
+                z-index: 1;
+            `;
+
+            // Create evaluation text with improved styling
             evalText = document.createElement('div');
             evalText.id = 'evalText';
             evalText.style = `
@@ -1789,51 +1852,77 @@ function main() {
                 text-align: center;
                 font-weight: bold;
                 font-size: 13px;
-                color: #333;
-                background-color: rgba(255,255,255,0.9);
+                color: #fff;
+                background-color: #2a2a2a;
                 padding: 4px;
-                border-radius: 4px;
-                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                border-radius: 3px;
+                box-shadow: 0 2px 6px rgba(0,0,0,0.3);
                 z-index: 101;
                 font-family: 'Roboto Mono', monospace;
+                transition: color 0.25s ease;
             `;
             evalText.textContent = '0.0';
 
-            // Create centipawn scale markers
+            // Create centipawn scale markers with improved styling
             const scaleMarkers = document.createElement('div');
             scaleMarkers.style = `
                 position: absolute;
-                right: -20px;
+                left: 0;
                 top: 0;
                 height: 100%;
-                width: 20px;
-                display: flex;
-                flex-direction: column;
-                justify-content: space-between;
-                font-size: 10px;
-                color: #666;
+                width: 100%;
                 pointer-events: none;
                 font-family: 'Roboto Mono', monospace;
             `;
 
-            // Add scale markers
-            const markerValues = ['+5', '+3', '+1', '0', '-1', '-3', '-5'];
-            markerValues.forEach((value, index) => {
-                const marker = document.createElement('span');
-                marker.textContent = value;
-                marker.style = `
+            // Add more precise scale markers (chess.com style)
+            const markerPositions = [
+                { value: '+5', position: 0 },      // +5.0
+                { value: '+3', position: 20 },     // +3.0
+                { value: '+2', position: 30 },     // +2.0
+                { value: '+1', position: 40 },     // +1.0
+                { value: '0', position: 50 },      // 0.0
+                { value: '-1', position: 60 },     // -1.0
+                { value: '-2', position: 70 },     // -2.0
+                { value: '-3', position: 80 },     // -3.0
+                { value: '-5', position: 100 }     // -5.0
+            ];
+
+            markerPositions.forEach(marker => {
+                // Create tick mark line
+                const tick = document.createElement('div');
+                tick.style = `
                     position: absolute;
-                    right: 0;
-                    top: ${(index / (markerValues.length - 1)) * 100}%;
+                    left: 0;
+                    top: ${marker.position}%;
+                    width: 100%;
+                    height: 1px;
+                    background-color: rgba(255,255,255,0.15);
                     transform: translateY(-50%);
-                    font-size: 9px;
-                    color: #888;
                 `;
-                scaleMarkers.appendChild(marker);
+
+                // Only add value labels for major ticks
+                if (['+5', '+3', '+1', '0', '-1', '-3', '-5'].includes(marker.value)) {
+                    const label = document.createElement('span');
+                    label.textContent = marker.value;
+                    label.style = `
+                        position: absolute;
+                        right: -20px;
+                        top: ${marker.position}%;
+                        transform: translateY(-50%);
+                        font-size: 9px;
+                        color: rgba(255,255,255,0.6);
+                        text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+                    `;
+                    scaleMarkers.appendChild(label);
+                }
+
+                scaleMarkers.appendChild(tick);
             });
 
             // Add elements to the DOM
             evalBarContainer.appendChild(evalBar);
+            evalBarContainer.appendChild(centerLine);
             evalBarContainer.appendChild(scaleMarkers);
             board.parentElement.style.position = 'relative';
             board.parentElement.appendChild(evalBarContainer);
@@ -2380,24 +2469,24 @@ function main() {
                                 </div>
                             </div>
 
-                            <!-- Arrow Animation Toggle -->
-                            <div style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px;">
-                                <div style="display: flex; align-items: center; justify-content: space-between;">
-                                    <label for="arrowAnimation" style="font-weight: bold;">Arrow Animation:</label>
-                                    <label class="switch" style="margin-left: 10px;">
-                                        <input type="checkbox" id="arrowAnimation" checked>
-                                        <span class="slider round"></span>
-                                    </label>
-                                </div>
-                                <div style="font-size: 12px; color: #666; margin-top: 5px;">
-                                    Enable or disable the arrow drawing animation
-                                </div>
-                            </div>
-
                             <div style="font-size: 12px; color: #666; margin-top: 15px; font-style: italic;">
-                                Customize the color, style, and animation of the move arrows
+                                Customize the color and style of the move arrows
                             </div>
                             </div><!-- End of arrowCustomizationSection -->
+                        </div>
+
+                        <!-- Arrow Animation Toggle (Separate from arrow customization) -->
+                        <div id="arrowAnimationContainer" style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px; display: none;">
+                            <div style="display: flex; align-items: center; justify-content: space-between;">
+                                <label for="arrowAnimation" style="font-weight: bold;">Arrow Animation:</label>
+                                <label class="switch" style="margin-left: 10px;">
+                                    <input type="checkbox" id="arrowAnimation" checked>
+                                    <span class="slider round"></span>
+                                </label>
+                            </div>
+                            <div style="font-size: 12px; color: #666; margin-top: 5px;">
+                                Enable or disable the arrow drawing animation
+                            </div>
                         </div>
 
                         <!-- Multiple Move Suggestions -->
@@ -3378,11 +3467,13 @@ function main() {
                 myFunctions.clearHighlights();
                 myFunctions.clearArrows();
 
-                // Show/hide arrow customization container based on selection
+                // Show/hide arrow customization and animation containers based on selection
                 if (this.value === 'arrows') {
                     $('#arrowCustomizationContainer').slideDown(200);
+                    $('#arrowAnimationContainer').slideDown(200);
                 } else {
                     $('#arrowCustomizationContainer').slideUp(200);
+                    $('#arrowAnimationContainer').slideUp(200);
                 }
             });
 
@@ -3424,9 +3515,10 @@ function main() {
                 if (this.checked) {
                     $('#multipleMovesOptions').slideDown(200);
 
-                    // If multicolor is enabled, hide arrow customization
+                    // If multicolor is enabled, hide arrow customization but keep animation container visible
                     if (myVars.useMulticolorMoves) {
                         $('#arrowCustomizationSection').slideUp(200);
+                        $('#arrowAnimationContainer').slideDown(200);
                     }
                 } else {
                     $('#multipleMovesOptions').slideUp(200);
@@ -3465,6 +3557,7 @@ function main() {
                     $('#opacityNote').hide();
 
                     // Hide arrow customization section when multicolor is enabled
+                    // but keep arrow animation container visible
                     $('#arrowCustomizationSection').slideUp(200);
                 } else {
                     $('#moveColorOptions').slideUp(200);
@@ -3850,11 +3943,13 @@ function main() {
                 if ($('input[name="moveIndicatorType"]').length) {
                     $('input[name="moveIndicatorType"][value="' + myVars.moveIndicatorType + '"]').prop('checked', true);
 
-                    // Show/hide arrow customization container based on move indicator type
+                    // Show/hide arrow customization and animation containers based on move indicator type
                     if (myVars.moveIndicatorType === 'arrows') {
                         $('#arrowCustomizationContainer').show();
+                        $('#arrowAnimationContainer').show();
                     } else {
                         $('#arrowCustomizationContainer').hide();
+                        $('#arrowAnimationContainer').hide();
                     }
                 }
 
@@ -3925,6 +4020,7 @@ function main() {
                         $('#moveColorOptions').show();
                         $('#opacityNote').hide();
                         // Hide arrow customization section when multicolor is enabled
+                        // but keep arrow animation container visible
                         $('#arrowCustomizationSection').hide();
                     } else {
                         $('#moveColorOptions').hide();
@@ -3932,6 +4028,11 @@ function main() {
                         // Show arrow customization section when multicolor is disabled
                         $('#arrowCustomizationSection').show();
                     }
+                }
+
+                // Always show arrow animation container if arrows are enabled
+                if (myVars.moveIndicatorType === 'arrows' && $('#arrowAnimationContainer')[0]) {
+                    $('#arrowAnimationContainer').show();
                 }
 
                 // Set color pickers
