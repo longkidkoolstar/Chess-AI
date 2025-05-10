@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Chess AI
 // @namespace    github.com/longkidkoolstar
-// @version      1.1.1
+// @version      1.1.2
 // @description  Chess.com Bot/Cheat that finds the best move with evaluation bar and ELO control!
 // @author       longkidkoolstar
 // @license      none
@@ -18,7 +18,7 @@
 // ==/UserScript==
 
 
-const currentVersion = '1.1.1'; // Updated version number
+const currentVersion = '1.1.2'; // Updated version number
 
 function main() {
 
@@ -2635,7 +2635,7 @@ function main() {
                         </span>
                     </button>
 
-                    <button id="showKeyboardShortcuts" style="width: 100%; padding: 10px; background-color: #9C27B0; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; box-shadow: 0 2px 5px rgba(156, 39, 176, 0.3);">
+                    <button id="showKeyboardShortcuts" style="width: 100%; padding: 10px; background-color: #9C27B0; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; box-shadow: 0 2px 5px rgba(156, 39, 176, 0.3); margin-bottom: 15px;">
                         <span style="display: flex; align-items: center; justify-content: center;">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 5px;">
                                 <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect>
@@ -2651,6 +2651,24 @@ function main() {
                             Keyboard Shortcuts
                         </span>
                     </button>
+
+                    <!-- Engine Move History Section -->
+                    <div id="moveHistoryContainer" style="margin-top: 15px; border: 1px solid #ccc; border-radius: 4px; padding: 10px; max-height: 200px; overflow-y: auto;">
+                        <h3 style="margin-top: 0; margin-bottom: 10px; font-size: 16px; color: #333;">Engine Move History</h3>
+                        <table id="moveHistoryTable" style="width: 100%; border-collapse: collapse;">
+                            <thead>
+                                <tr>
+                                    <th style="text-align: left; padding: 5px; border-bottom: 1px solid #ddd;">Move</th>
+                                    <th style="text-align: left; padding: 5px; border-bottom: 1px solid #ddd;">Eval</th>
+                                    <th style="text-align: left; padding: 5px; border-bottom: 1px solid #ddd;">Depth</th>
+                                </tr>
+                            </thead>
+                            <tbody id="moveHistoryTableBody">
+                                <!-- Move history entries will be added here dynamically -->
+                            </tbody>
+                        </table>
+                        <button id="clearHistoryBtn" style="margin-top: 10px; padding: 5px 10px; background-color: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer;">Clear History</button>
+                    </div>
                 </div>
             </div>
             </div>`;
@@ -2935,10 +2953,6 @@ function main() {
 
             board.parentElement.parentElement.appendChild(div);
 
-            // Add move history display
-            const moveHistoryDisplay = myFunctions.createMoveHistoryDisplay();
-            contentContainer.appendChild(moveHistoryDisplay);
-
             //spinnerContainer
             var spinCont = document.createElement('div');
             spinCont.setAttribute('style','display:none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); z-index: 1000; display: flex; justify-content: center; align-items: center;');
@@ -3056,6 +3070,10 @@ function main() {
 
             $('#showKeyboardShortcuts').on('click', function() {
                 document.getElementById('keyboardShortcutsModal').style.display = 'flex';
+            });
+
+            $('#clearHistoryBtn').on('click', function() {
+                document.getElementById('moveHistoryTableBody').innerHTML = '';
             });
 
             // Add collapse functionality
@@ -4344,78 +4362,7 @@ function main() {
         document.body.appendChild(welcomeModal);
     }
 
-    // Create a move history display
-    myFunctions.createMoveHistoryDisplay = function() {
-        // Create container for move history
-        const moveHistoryContainer = document.createElement('div');
-        moveHistoryContainer.id = 'moveHistoryContainer';
-        moveHistoryContainer.style = `
-            margin-top: 15px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            padding: 10px;
-            max-height: 200px;
-            overflow-y: auto;
-        `;
-
-        // Create header
-        const header = document.createElement('h3');
-        header.textContent = 'Engine Move History';
-        header.style = `
-            margin-top: 0;
-            margin-bottom: 10px;
-            font-size: 16px;
-            color: #333;
-        `;
-
-        // Create table for moves
-        const moveTable = document.createElement('table');
-        moveTable.id = 'moveHistoryTable';
-        moveTable.style = `
-            width: 100%;
-            border-collapse: collapse;
-        `;
-
-        // Create table header
-        const tableHeader = document.createElement('thead');
-        tableHeader.innerHTML = `
-            <tr>
-                <th style="text-align: left; padding: 5px; border-bottom: 1px solid #ddd;">Move</th>
-                <th style="text-align: left; padding: 5px; border-bottom: 1px solid #ddd;">Eval</th>
-                <th style="text-align: left; padding: 5px; border-bottom: 1px solid #ddd;">Depth</th>
-            </tr>
-        `;
-
-        // Create table body
-        const tableBody = document.createElement('tbody');
-        tableBody.id = 'moveHistoryTableBody';
-
-        // Assemble the components
-        moveTable.appendChild(tableHeader);
-        moveTable.appendChild(tableBody);
-        moveHistoryContainer.appendChild(header);
-        moveHistoryContainer.appendChild(moveTable);
-
-        // Add clear history button
-        const clearButton = document.createElement('button');
-        clearButton.textContent = 'Clear History';
-        clearButton.style = `
-            margin-top: 10px;
-            padding: 5px 10px;
-            background-color: #f44336;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        `;
-        clearButton.onclick = function() {
-            document.getElementById('moveHistoryTableBody').innerHTML = '';
-        };
-
-        moveHistoryContainer.appendChild(clearButton);
-
-        return moveHistoryContainer;
-    };
+    // The move history display is now embedded directly in the Actions tab HTML
 
     // Add a move to the history
     myFunctions.addMoveToHistory = function(move, evaluation, depth) {
