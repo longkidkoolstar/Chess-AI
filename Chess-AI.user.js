@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Chess AI
 // @namespace    github.com/longkidkoolstar
-// @version      1.2
+// @version      1.2.1
 // @description  Chess.com Bot/Cheat that finds the best move with evaluation bar and ELO control!
 // @author       longkidkoolstar
 // @license      none
@@ -18,7 +18,7 @@
 // ==/UserScript==
 
 
-const currentVersion = '1.2'; // Updated version number
+const currentVersion = '1.2.1'; // Updated version number
 
 function main() {
 
@@ -2868,7 +2868,7 @@ function main() {
                             <label for="useVirtualChessboard"> Use virtual chessboard for move suggestions</label>
                         </div>
                         <div style="font-size: 12px; color: #666; margin-top: 5px; font-style: italic;">
-                            Displays move suggestions on a virtual chessboard in the GUI instead of overlaying them on the main board (helps avoid detection)
+                            Displays move suggestions on a virtual chessboard in the Actions tab instead of overlaying them on the main board (helps avoid detection)
                         </div>
 
                         <div style="margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px;">
