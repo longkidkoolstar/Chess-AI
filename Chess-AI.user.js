@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Chess AI
 // @namespace    github.com/longkidkoolstar
-// @version      1.1.2
+// @version      1.2
 // @description  Chess.com Bot/Cheat that finds the best move with evaluation bar and ELO control!
 // @author       longkidkoolstar
 // @license      none
@@ -18,7 +18,7 @@
 // ==/UserScript==
 
 
-const currentVersion = '1.1.2'; // Updated version number
+const currentVersion = '1.2'; // Updated version number
 
 function main() {
 
@@ -30,6 +30,7 @@ function main() {
     myVars.delay = 0.1;
     myVars.eloRating = 1500; // Default ELO rating
     myVars.currentEvaluation = 0; // Current evaluation value
+    myVars.useVirtualChessboard = false; // Default to not using virtual chessboard
     myVars.persistentHighlights = true; // Default to persistent highlights
     myVars.moveIndicatorType = 'highlights'; // Default to highlights instead of arrows
     myVars.showMultipleMoves = false; // Default to showing only the best move
@@ -239,6 +240,9 @@ function main() {
         myFunctions.clearHighlights();
         myFunctions.clearArrows();
 
+        // Also clear virtual chessboard indicators
+        myFunctions.clearVirtualMoveIndicators();
+
         if(myVars.autoMove == true){
             myFunctions.movePiece(res1, res2);
 
@@ -261,19 +265,121 @@ function main() {
             // Debug information
             console.log("Multiple moves enabled:", myVars.showMultipleMoves);
             console.log("Top moves array:", myVars.topMoves);
+            console.log("Virtual chessboard enabled:", myVars.useVirtualChessboard);
 
-            // Check if we should show multiple moves
-            if (myVars.showMultipleMoves && myVars.topMoves && myVars.topMoves.length > 1) {
-                console.log("Showing multiple moves:", myVars.topMoves.length);
-                // Show multiple moves with varying opacity
-                myFunctions.showMultipleMoveIndicators();
+            // If virtual chessboard is enabled, update it with the current position
+            if (myVars.useVirtualChessboard) {
+                // Make sure the virtual chessboard container is visible
+                const virtualChessboardContainer = document.getElementById('virtualChessboardContainer');
+                if (virtualChessboardContainer) {
+                    virtualChessboardContainer.style.display = 'block';
+                }
+
+                // Update the virtual chessboard with the current position
+                myFunctions.updateVirtualChessboard();
+
+                // Show move indicators on the virtual chessboard
+                if (myVars.showMultipleMoves && myVars.topMoves && myVars.topMoves.length > 1) {
+                    console.log("Showing multiple moves on virtual chessboard:", myVars.topMoves.length);
+
+                    // Show multiple moves with varying opacity on virtual chessboard
+                    const movesToShow = Math.min(myVars.numberOfMovesToShow, myVars.topMoves.length);
+                    const bestEval = myVars.topMoves[0].evaluation;
+
+                    for (let i = 0; i < movesToShow; i++) {
+                        const moveInfo = myVars.topMoves[i];
+                        const move = moveInfo.move;
+
+                        // Skip if move is undefined
+                        if (!move) continue;
+
+                        const moveRes1 = move.substring(0, 2);
+                        const moveRes2 = move.substring(2, 4);
+
+                        // Variables for styling
+                        let opacity = 0.9;
+                        let moveColor = null;
+
+                        if (myVars.useMulticolorMoves) {
+                            // Use different colors for each move
+                            moveColor = myVars.moveColors[i + 1] || getDefaultMoveColor(i);
+                            opacity = 0.9;
+                        } else {
+                            // Calculate opacity based on relative strength
+                            if (i > 0) {
+                                if (!moveInfo.isMate && !myVars.topMoves[0].isMate) {
+                                    const relativeStrength = Math.max(0, 1 - Math.abs(bestEval - moveInfo.evaluation) / 3);
+                                    opacity = 0.3 + (relativeStrength * 0.6);
+                                } else {
+                                    opacity = 0.9 - (i * 0.15);
+                                }
+                            }
+                            opacity = Math.max(0.3, Math.min(0.9, opacity));
+                        }
+
+                        // Helper function to get default color for a move index
+                        function getDefaultMoveColor(index) {
+                            const defaultColors = [
+                                '#F44336', // Red for best move
+                                '#FF9800', // Orange for 2nd best
+                                '#FFEB3B', // Yellow for 3rd best
+                                '#4CAF50', // Green for 4th best
+                                '#2196F3'  // Blue for 5th best
+                            ];
+                            return defaultColors[index] || '#9C27B0'; // Default to purple if out of range
+                        }
+
+                        // Get the color to use
+                        let highlightColor = 'rgb(235, 97, 80)'; // Default red color
+
+                        if (myVars.useMulticolorMoves) {
+                            // Convert hex color to RGB for highlights
+                            const moveColor = myVars.moveColors[i + 1] || getDefaultMoveColor(i);
+                            highlightColor = hexToRgb(moveColor);
+                        }
+
+                        // Helper function to convert hex color to RGB format
+                        function hexToRgb(hex) {
+                            // Remove # if present
+                            hex = hex.replace('#', '');
+
+                            // Parse the hex values
+                            const r = parseInt(hex.substring(0, 2), 16);
+                            const g = parseInt(hex.substring(2, 4), 16);
+                            const b = parseInt(hex.substring(4, 6), 16);
+
+                            // Return RGB format
+                            return `rgb(${r}, ${g}, ${b})`;
+                        }
+
+                        // Show the move on the virtual chessboard
+                        myFunctions.showVirtualMoveIndicator(moveRes1, moveRes2, opacity, highlightColor);
+                    }
+                } else {
+                    console.log("Showing single move on virtual chessboard");
+                    // Show just the best move on virtual chessboard
+                    myFunctions.showVirtualMoveIndicator(res1, res2);
+                }
             } else {
-                console.log("Showing single move - reason:",
-                    !myVars.showMultipleMoves ? "Multiple moves disabled" :
-                    !myVars.topMoves ? "No top moves array" :
-                    myVars.topMoves.length <= 1 ? "Not enough moves in array" : "Unknown");
-                // Show just the best move (original behavior)
-                myFunctions.showSingleMoveIndicator(res1, res2);
+                // Hide the virtual chessboard container
+                const virtualChessboardContainer = document.getElementById('virtualChessboardContainer');
+                if (virtualChessboardContainer) {
+                    virtualChessboardContainer.style.display = 'none';
+                }
+
+                // Show move indicators on the main board as before
+                if (myVars.showMultipleMoves && myVars.topMoves && myVars.topMoves.length > 1) {
+                    console.log("Showing multiple moves:", myVars.topMoves.length);
+                    // Show multiple moves with varying opacity
+                    myFunctions.showMultipleMoveIndicators();
+                } else {
+                    console.log("Showing single move - reason:",
+                        !myVars.showMultipleMoves ? "Multiple moves disabled" :
+                        !myVars.topMoves ? "No top moves array" :
+                        myVars.topMoves.length <= 1 ? "Not enough moves in array" : "Unknown");
+                    // Show just the best move (original behavior)
+                    myFunctions.showSingleMoveIndicator(res1, res2);
+                }
             }
         }
     }
@@ -541,6 +647,329 @@ function main() {
     myFunctions.clearArrows = function() {
         // Remove all arrows
         $('.chess-arrow-svg').remove();
+    }
+
+    // Function to create and update the virtual chessboard
+    myFunctions.updateVirtualChessboard = function() {
+        const virtualChessboard = document.getElementById('virtualChessboard');
+        if (!virtualChessboard) return;
+
+        // Clear the virtual chessboard
+        virtualChessboard.innerHTML = '';
+
+        // Get the current FEN from the board
+        const fen = board.game.getFEN();
+        const fenParts = fen.split(' ');
+        const position = fenParts[0];
+        const rows = position.split('/');
+
+        // Create the chessboard squares
+        for (let row = 0; row < 8; row++) {
+            for (let col = 0; col < 8; col++) {
+                const square = document.createElement('div');
+                square.className = 'virtual-square';
+                square.style.position = 'absolute';
+                square.style.width = '12.5%';
+                square.style.height = '12.5%';
+                square.style.top = (row * 12.5) + '%';
+                square.style.left = (col * 12.5) + '%';
+                square.style.backgroundColor = (row + col) % 2 === 0 ? '#f0d9b5' : '#b58863';
+
+                // Add coordinates
+                if (row === 7) {
+                    const fileLabel = document.createElement('div');
+                    fileLabel.style.position = 'absolute';
+                    fileLabel.style.bottom = '2px';
+                    fileLabel.style.right = '2px';
+                    fileLabel.style.fontSize = '10px';
+                    fileLabel.style.color = (row + col) % 2 === 0 ? '#b58863' : '#f0d9b5';
+                    fileLabel.textContent = String.fromCharCode(97 + col); // 'a' to 'h'
+                    square.appendChild(fileLabel);
+                }
+
+                if (col === 0) {
+                    const rankLabel = document.createElement('div');
+                    rankLabel.style.position = 'absolute';
+                    rankLabel.style.top = '2px';
+                    rankLabel.style.left = '2px';
+                    rankLabel.style.fontSize = '10px';
+                    rankLabel.style.color = (row + col) % 2 === 0 ? '#b58863' : '#f0d9b5';
+                    rankLabel.textContent = 8 - row; // '8' to '1'
+                    square.appendChild(rankLabel);
+                }
+
+                // Add data attributes for easier reference
+                const file = String.fromCharCode(97 + col); // 'a' to 'h'
+                const rank = 8 - row; // '8' to '1'
+                square.dataset.square = file + rank;
+
+                virtualChessboard.appendChild(square);
+            }
+        }
+
+        // Debug log the FEN string
+        console.log("Virtual chessboard FEN:", fen);
+
+        // Place pieces on the board
+        let rowIndex = 0;
+
+        for (const row of rows) {
+            let colIndex = 0;
+
+            for (let i = 0; i < row.length; i++) {
+                const char = row[i];
+
+                if (/[1-8]/.test(char)) {
+                    // Skip empty squares
+                    colIndex += parseInt(char);
+                } else {
+                    // Place a piece
+                    const pieceElement = document.createElement('div');
+                    pieceElement.className = 'virtual-piece';
+                    pieceElement.style.position = 'absolute';
+                    pieceElement.style.width = '12.5%';
+                    pieceElement.style.height = '12.5%';
+                    pieceElement.style.top = (rowIndex * 12.5) + '%';
+                    pieceElement.style.left = (colIndex * 12.5) + '%';
+                    pieceElement.style.backgroundSize = 'contain';
+                    pieceElement.style.backgroundRepeat = 'no-repeat';
+                    pieceElement.style.backgroundPosition = 'center';
+                    pieceElement.style.zIndex = '1';
+
+                    // Set the piece image based on the FEN character
+                    const pieceType = char.toLowerCase();
+                    const pieceColor = char === char.toLowerCase() ? 'b' : 'w';
+
+                    // Map FEN characters to piece types
+                    const pieceMap = {
+                        'p': 'pawn',
+                        'r': 'rook',
+                        'n': 'knight',
+                        'b': 'bishop',
+                        'q': 'queen',
+                        'k': 'king'
+                    };
+
+                    // Debug log the piece being placed
+                    console.log(`Placing ${pieceColor}${pieceMap[pieceType]} at row ${rowIndex}, col ${colIndex}`);
+
+                    // Use chess.com piece style with direct URLs
+                    const pieceUrls = {
+                        'wp': 'https://www.chess.com/chess-themes/pieces/neo/150/wp.png',
+                        'wn': 'https://www.chess.com/chess-themes/pieces/neo/150/wn.png',
+                        'wb': 'https://www.chess.com/chess-themes/pieces/neo/150/wb.png',
+                        'wr': 'https://www.chess.com/chess-themes/pieces/neo/150/wr.png',
+                        'wq': 'https://www.chess.com/chess-themes/pieces/neo/150/wq.png',
+                        'wk': 'https://www.chess.com/chess-themes/pieces/neo/150/wk.png',
+                        'bp': 'https://www.chess.com/chess-themes/pieces/neo/150/bp.png',
+                        'bn': 'https://www.chess.com/chess-themes/pieces/neo/150/bn.png',
+                        'bb': 'https://www.chess.com/chess-themes/pieces/neo/150/bb.png',
+                        'br': 'https://www.chess.com/chess-themes/pieces/neo/150/br.png',
+                        'bq': 'https://www.chess.com/chess-themes/pieces/neo/150/bq.png',
+                        'bk': 'https://www.chess.com/chess-themes/pieces/neo/150/bk.png'
+                    };
+
+                    const pieceKey = pieceColor + pieceType;
+                    pieceElement.style.backgroundImage = `url(${pieceUrls[pieceKey]})`;
+
+                    // Add a fallback in case the direct URL doesn't work
+                    pieceElement.onerror = function() {
+                        pieceElement.style.backgroundImage = `url(https://www.chess.com/chess-themes/pieces/neo/150/${pieceColor}${pieceMap[pieceType]}.png)`;
+                    };
+
+                    // Add a text fallback in case images don't load
+                    pieceElement.textContent = char;
+                    pieceElement.style.display = 'flex';
+                    pieceElement.style.justifyContent = 'center';
+                    pieceElement.style.alignItems = 'center';
+                    pieceElement.style.fontSize = '20px';
+                    pieceElement.style.fontWeight = 'bold';
+                    pieceElement.style.color = pieceColor === 'w' ? '#fff' : '#000';
+                    pieceElement.style.textShadow = pieceColor === 'w' ? '0 0 2px #000' : '0 0 2px #fff';
+
+                    virtualChessboard.appendChild(pieceElement);
+
+                    colIndex++;
+                }
+            }
+
+            rowIndex++;
+        }
+    }
+
+    // Function to show move indicators on the virtual chessboard
+    myFunctions.showVirtualMoveIndicator = function(fromSquare, toSquare, opacity = 0.7, color = 'rgb(235, 97, 80)') {
+        const virtualChessboard = document.getElementById('virtualChessboard');
+        if (!virtualChessboard) return;
+
+        // Convert numeric coordinates to algebraic notation if needed
+        let fromAlgebraic = fromSquare;
+        let toAlgebraic = toSquare;
+
+        // If fromSquare is numeric (e.g., "11", "22"), convert to algebraic (e.g., "a1", "b2")
+        if (/^\d+$/.test(fromSquare)) {
+            const file = String.fromCharCode(96 + parseInt(fromSquare[1])); // '1' -> 'a', '2' -> 'b', etc.
+            const rank = fromSquare[0];
+            fromAlgebraic = file + rank;
+        }
+
+        // Same for toSquare
+        if (/^\d+$/.test(toSquare)) {
+            const file = String.fromCharCode(96 + parseInt(toSquare[1])); // '1' -> 'a', '2' -> 'b', etc.
+            const rank = toSquare[0];
+            toAlgebraic = file + rank;
+        }
+
+        // Use arrows or highlights based on user preference
+        if (myVars.moveIndicatorType === 'arrows') {
+            // Draw an arrow from 'from' to 'to'
+            myFunctions.drawVirtualArrow(fromAlgebraic, toAlgebraic, opacity, color);
+        } else {
+            // Create highlight for the 'from' square
+            const fromHighlight = document.createElement('div');
+            fromHighlight.className = 'virtual-highlight';
+            fromHighlight.style.position = 'absolute';
+            fromHighlight.style.width = '12.5%';
+            fromHighlight.style.height = '12.5%';
+            fromHighlight.style.backgroundColor = color;
+            fromHighlight.style.opacity = opacity;
+            fromHighlight.style.zIndex = '2';
+
+            // Create highlight for the 'to' square
+            const toHighlight = document.createElement('div');
+            toHighlight.className = 'virtual-highlight';
+            toHighlight.style.position = 'absolute';
+            toHighlight.style.width = '12.5%';
+            toHighlight.style.height = '12.5%';
+            toHighlight.style.backgroundColor = color;
+            toHighlight.style.opacity = opacity;
+            toHighlight.style.zIndex = '2';
+
+            // Position the highlights based on the square coordinates
+            const squares = virtualChessboard.querySelectorAll('.virtual-square');
+
+            squares.forEach(square => {
+                if (square.dataset.square === fromAlgebraic) {
+                    fromHighlight.style.top = square.style.top;
+                    fromHighlight.style.left = square.style.left;
+                    virtualChessboard.appendChild(fromHighlight);
+                }
+
+                if (square.dataset.square === toAlgebraic) {
+                    toHighlight.style.top = square.style.top;
+                    toHighlight.style.left = square.style.left;
+                    virtualChessboard.appendChild(toHighlight);
+                }
+            });
+        }
+    }
+
+    // Function to draw an arrow on the virtual chessboard
+    myFunctions.drawVirtualArrow = function(fromSquare, toSquare, opacity = 0.7, color = 'rgb(235, 97, 80)') {
+        const virtualChessboard = document.getElementById('virtualChessboard');
+        if (!virtualChessboard) return;
+
+        // Find the positions of the squares
+        let fromPos = null;
+        let toPos = null;
+
+        const squares = virtualChessboard.querySelectorAll('.virtual-square');
+
+        squares.forEach(square => {
+            if (square.dataset.square === fromSquare) {
+                const rect = square.getBoundingClientRect();
+                const boardRect = virtualChessboard.getBoundingClientRect();
+                fromPos = {
+                    x: (rect.left - boardRect.left) + (rect.width / 2),
+                    y: (rect.top - boardRect.top) + (rect.height / 2)
+                };
+            }
+
+            if (square.dataset.square === toSquare) {
+                const rect = square.getBoundingClientRect();
+                const boardRect = virtualChessboard.getBoundingClientRect();
+                toPos = {
+                    x: (rect.left - boardRect.left) + (rect.width / 2),
+                    y: (rect.top - boardRect.top) + (rect.height / 2)
+                };
+            }
+        });
+
+        if (!fromPos || !toPos) return;
+
+        // Create SVG element for the arrow
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('width', '100%');
+        svg.setAttribute('height', '100%');
+        svg.setAttribute('class', 'virtual-arrow');
+        svg.style.position = 'absolute';
+        svg.style.top = '0';
+        svg.style.left = '0';
+        svg.style.zIndex = '3';
+        svg.style.pointerEvents = 'none';
+
+        // Calculate the angle and length of the arrow
+        const dx = toPos.x - fromPos.x;
+        const dy = toPos.y - fromPos.y;
+        const angle = Math.atan2(dy, dx);
+        const length = Math.sqrt(dx * dx + dy * dy);
+
+        // Adjust start and end points to not cover the pieces
+        const squareSize = virtualChessboard.getBoundingClientRect().width / 8;
+        const margin = squareSize * 0.3;
+        const startX = fromPos.x + Math.cos(angle) * margin;
+        const startY = fromPos.y + Math.sin(angle) * margin;
+        const endX = toPos.x - Math.cos(angle) * margin;
+        const endY = toPos.y - Math.sin(angle) * margin;
+
+        // Create the arrow shaft
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', startX);
+        line.setAttribute('y1', startY);
+        line.setAttribute('x2', endX);
+        line.setAttribute('y2', endY);
+        line.setAttribute('stroke', color);
+        line.setAttribute('stroke-width', squareSize / 8);
+        line.setAttribute('opacity', opacity);
+
+        // Create the arrow head
+        const arrowHead = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+        const arrowSize = squareSize / 3;
+        const arrowAngle = Math.PI / 7;
+
+        const point1X = endX;
+        const point1Y = endY;
+        const point2X = endX - arrowSize * Math.cos(angle - arrowAngle);
+        const point2Y = endY - arrowSize * Math.sin(angle - arrowAngle);
+        const point3X = endX - arrowSize * 0.6 * Math.cos(angle);
+        const point3Y = endY - arrowSize * 0.6 * Math.sin(angle);
+        const point4X = endX - arrowSize * Math.cos(angle + arrowAngle);
+        const point4Y = endY - arrowSize * Math.sin(angle + arrowAngle);
+
+        arrowHead.setAttribute('points', `${point1X},${point1Y} ${point2X},${point2Y} ${point3X},${point3Y} ${point4X},${point4Y}`);
+        arrowHead.setAttribute('fill', color);
+        arrowHead.setAttribute('opacity', opacity);
+
+        // Add elements to the SVG
+        svg.appendChild(line);
+        svg.appendChild(arrowHead);
+
+        // Add the SVG to the virtual chessboard
+        virtualChessboard.appendChild(svg);
+    }
+
+    // Function to clear virtual chessboard highlights and arrows
+    myFunctions.clearVirtualMoveIndicators = function() {
+        const virtualChessboard = document.getElementById('virtualChessboard');
+        if (!virtualChessboard) return;
+
+        // Remove all highlights
+        const highlights = virtualChessboard.querySelectorAll('.virtual-highlight');
+        highlights.forEach(highlight => highlight.remove());
+
+        // Remove all arrows
+        const arrows = virtualChessboard.querySelectorAll('.virtual-arrow');
+        arrows.forEach(arrow => arrow.remove());
     }
 
     // Function to draw an arrow on the chess board
@@ -2434,6 +2863,14 @@ function main() {
                             <label for="persistentHighlights"> Keep highlights until next move</label>
                         </div>
 
+                        <div style="display: flex; align-items: center; margin-bottom: 12px; border-top: 1px solid #eee; padding-top: 10px;">
+                            <input type="checkbox" id="useVirtualChessboard" name="useVirtualChessboard" value="false" style="margin-right: 8px;">
+                            <label for="useVirtualChessboard"> Use virtual chessboard for move suggestions</label>
+                        </div>
+                        <div style="font-size: 12px; color: #666; margin-top: 5px; font-style: italic;">
+                            Displays move suggestions on a virtual chessboard in the GUI instead of overlaying them on the main board (helps avoid detection)
+                        </div>
+
                         <div style="margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px;">
                             <label style="display: block; margin-bottom: 8px; font-weight: bold;">Move Indicator Style:</label>
                             <div style="display: flex; align-items: center; margin-bottom: 8px;">
@@ -2605,6 +3042,15 @@ function main() {
 
                 <!-- Actions Tab -->
                 <div id="actions-tab" class="tab-content">
+                    <!-- Virtual Chessboard (only shown when enabled) -->
+                    <div id="virtualChessboardContainer" style="display: none; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 4px; padding: 10px; background-color: #f9f9f9;">
+                        <div style="font-weight: bold; margin-bottom: 8px; color: #2196F3;">Virtual Chessboard</div>
+                        <div id="virtualChessboard" style="width: 100%; aspect-ratio: 1; position: relative; margin-bottom: 10px; border: 1px solid #ccc; background-color: #fff;"></div>
+                        <div style="font-size: 12px; color: #666; text-align: center;">
+                            Move suggestions are shown here instead of on the main board
+                        </div>
+                    </div>
+
                     <div style="display: flex; gap: 10px; margin-bottom: 15px;">
                         <button id="runEngineBtn" style="flex: 1; padding: 10px; background-color: #4CAF50; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; box-shadow: 0 2px 5px rgba(76, 175, 80, 0.3);">
                             <span style="display: flex; align-items: center; justify-content: center;">
@@ -3477,6 +3923,27 @@ function main() {
                 }
             });
 
+            // Add event listener for the virtual chessboard toggle
+            $('#useVirtualChessboard').on('change', function() {
+                myVars.useVirtualChessboard = this.checked;
+
+                // Show/hide the virtual chessboard container based on the setting
+                const virtualChessboardContainer = document.getElementById('virtualChessboardContainer');
+                if (virtualChessboardContainer) {
+                    virtualChessboardContainer.style.display = this.checked ? 'block' : 'none';
+                }
+
+                // If enabled, update the virtual chessboard with the current position
+                if (this.checked) {
+                    myFunctions.updateVirtualChessboard();
+
+                    // If we have a last move, show it on the virtual chessboard
+                    if (myVars.lastMove) {
+                        myFunctions.showVirtualMoveIndicator(myVars.lastMove.from, myVars.lastMove.to);
+                    }
+                }
+            });
+
             // Add event listeners for the move indicator type radio buttons
             $('input[name="moveIndicatorType"]').on('change', function() {
                 myVars.moveIndicatorType = this.value;
@@ -3840,6 +4307,7 @@ function main() {
                 4: $('#moveColor4').val() || '#4CAF50',
                 5: $('#moveColor5').val() || '#2196F3'
             },
+            useVirtualChessboard: $('#useVirtualChessboard')[0].checked,
             fusionMode: myVars.fusionMode,
             humanMode: myVars.humanMode ? {
                 active: myVars.humanMode.active,
@@ -3909,6 +4377,7 @@ function main() {
                 myVars.showMultipleMoves = settings.showMultipleMoves !== undefined ? settings.showMultipleMoves : false;
                 myVars.numberOfMovesToShow = settings.numberOfMovesToShow || 3;
                 myVars.useMulticolorMoves = settings.useMulticolorMoves !== undefined ? settings.useMulticolorMoves : false;
+                myVars.useVirtualChessboard = settings.useVirtualChessboard !== undefined ? settings.useVirtualChessboard : false;
 
                 // Load move colors if they exist
                 if (settings.moveColors) {
@@ -4059,6 +4528,24 @@ function main() {
                         if ($(`#moveColor${i}`)[0] && myVars.moveColors[i]) {
                             $(`#moveColor${i}`)[0].value = myVars.moveColors[i];
                         }
+                    }
+                }
+
+                // Set virtual chessboard toggle
+                if ($('#useVirtualChessboard')[0]) {
+                    $('#useVirtualChessboard')[0].checked = myVars.useVirtualChessboard;
+
+                    // Show/hide the virtual chessboard container based on the setting
+                    const virtualChessboardContainer = document.getElementById('virtualChessboardContainer');
+                    if (virtualChessboardContainer) {
+                        virtualChessboardContainer.style.display = myVars.useVirtualChessboard ? 'block' : 'none';
+                    }
+
+                    // If enabled, update the virtual chessboard with the current position
+                    if (myVars.useVirtualChessboard) {
+                        setTimeout(() => {
+                            myFunctions.updateVirtualChessboard();
+                        }, 500); // Slight delay to ensure the board is ready
                     }
                 }
 
