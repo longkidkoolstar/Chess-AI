@@ -242,11 +242,121 @@
                     <button id="run-engine">Run Engine Analysis</button>
                     <button id="stop-engine" disabled>Stop Engine</button>
                 </div>
-                <div class="control-row">
-                    <button id="auto-move">Auto Move</button>
-                    <button id="auto-run">Auto Run</button>
+
+                <div style="margin-top: 20px; border: 1px solid #eee; border-radius: 8px; padding: 15px;">
+                    <h3 style="margin-top: 0; color: #333; font-size: 16px; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 15px;">Automation Settings</h3>
+
+                    <!-- Auto Move Toggle -->
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px;">
+                        <div>
+                            <label for="auto-move-toggle" style="font-weight: bold; color: #4CAF50;">Auto Move</label>
+                            <div style="font-size: 12px; color: #666;">Automatically plays the best move</div>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="auto-move-toggle">
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+
+                    <!-- Auto Run Toggle -->
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px;">
+                        <div>
+                            <label for="auto-run-toggle" style="font-weight: bold; color: #FF9800;">Auto Run</label>
+                            <div style="font-size: 12px; color: #666;">Automatically analyzes when it's your turn</div>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="auto-run-toggle">
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+
+                    <!-- Auto Run Delay Settings -->
+                    <div id="auto-run-delay-container" style="margin-top: 15px; display: none;">
+                        <div style="font-weight: bold; margin-bottom: 10px;">Auto Run Delay (seconds):</div>
+
+                        <!-- Min Delay -->
+                        <div style="display: flex; align-items: center; margin-bottom: 10px;">
+                            <label for="auto-run-delay-min" style="width: 80px;">Minimum:</label>
+                            <input type="number" id="auto-run-delay-min" step="0.1" value="0.1" style="width: 80px; padding: 5px; border: 1px solid #ccc; border-radius: 4px;">
+                            <span style="margin-left: 5px;">seconds</span>
+                        </div>
+
+                        <!-- Max Delay -->
+                        <div style="display: flex; align-items: center; margin-bottom: 5px;">
+                            <label for="auto-run-delay-max" style="width: 80px;">Maximum:</label>
+                            <input type="number" id="auto-run-delay-max" step="0.1" value="1.0" style="width: 80px; padding: 5px; border: 1px solid #ccc; border-radius: 4px;">
+                            <span style="margin-left: 5px;">seconds</span>
+                        </div>
+
+                        <div style="font-size: 12px; color: #666; margin-top: 8px; font-style: italic;">
+                            Random delay between min and max to simulate human thinking time
+                        </div>
+                    </div>
                 </div>
             </div>
+
+            <style>
+                /* Toggle Switch Styles */
+                .switch {
+                    position: relative;
+                    display: inline-block;
+                    width: 60px;
+                    height: 34px;
+                }
+
+                .switch input {
+                    opacity: 0;
+                    width: 0;
+                    height: 0;
+                }
+
+                .slider {
+                    position: absolute;
+                    cursor: pointer;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background-color: #ccc;
+                    transition: .4s;
+                }
+
+                .slider:before {
+                    position: absolute;
+                    content: "";
+                    height: 26px;
+                    width: 26px;
+                    left: 4px;
+                    bottom: 4px;
+                    background-color: white;
+                    transition: .4s;
+                }
+
+                input:checked + .slider {
+                    background-color: #2196F3;
+                }
+
+                input:checked + .slider:before {
+                    transform: translateX(26px);
+                }
+
+                .slider.round {
+                    border-radius: 34px;
+                }
+
+                .slider.round:before {
+                    border-radius: 50%;
+                }
+
+                /* Color specific toggles */
+                #auto-move-toggle:checked + .slider {
+                    background-color: #4CAF50;
+                }
+
+                #auto-run-toggle:checked + .slider {
+                    background-color: #FF9800;
+                }
+            </style>
 
             <div id="settings">
                 <h3>Settings</h3>
@@ -403,6 +513,12 @@
             // Evaluation bar colors
             white_advantage_color: "#4CAF50",
             black_advantage_color: "#F44336",
+
+            // Automation settings
+            auto_move: false,
+            auto_run: false,
+            auto_run_delay_min: 0.1,
+            auto_run_delay_max: 1.0,
 
             // Settings synchronization metadata
             settings_last_updated: 0,
@@ -944,86 +1060,33 @@
 
                     console.log(`Received state update - Current timestamp: ${currentSettingsTimestamp}, Incoming timestamp: ${incomingSettingsTimestamp}, Source: ${incomingSource}`);
 
-                    // Define visual settings keys
-                    const visualSettingsKeys = [
-                        "move_indicator_location", "move_indicator_type", "show_multiple_moves",
-                        "number_of_moves_to_show", "use_multicolor_moves", "arrow_style",
-                        "arrow_animation", "white_advantage_color", "black_advantage_color",
-                        "arrow_opacity", "persistent_highlights"
-                    ];
-
-                    // If we're currently updating settings from the external board, handle userscript updates carefully
+                    // If we're currently updating settings from the external board, don't override with userscript settings
                     if (isUpdatingSettings && incomingSource === 'userscript') {
-                        console.log('External board is currently updating settings, handling userscript update carefully');
+                        console.log('Ignoring userscript settings update while external board is updating settings');
 
-                        // Check if the userscript update is newer than our current settings
-                        if (incomingSettingsTimestamp > currentSettingsTimestamp) {
-                            console.log('Userscript settings are newer, merging with current changes');
+                        // Only update non-visual settings
+                        const visualSettingsKeys = [
+                            "move_indicator_location", "move_indicator_type", "show_multiple_moves",
+                            "number_of_moves_to_show", "use_multicolor_moves", "arrow_style",
+                            "arrow_animation", "white_advantage_color", "black_advantage_color",
+                            "arrow_opacity", "persistent_highlights"
+                        ];
 
-                            // Save our current visual settings
-                            const currentVisualSettings = {};
-                            for (const key of visualSettingsKeys) {
-                                currentVisualSettings[key] = chessState[key];
-                            }
-
-                            // Update non-visual settings from userscript
-                            for (const key in data) {
-                                if (!visualSettingsKeys.includes(key)) {
-                                    chessState[key] = data[key];
-                                }
-                            }
-
-                            // Restore our current visual settings
-                            for (const key in currentVisualSettings) {
-                                chessState[key] = currentVisualSettings[key];
-                            }
-
-                            // Keep our timestamp and source
-                            chessState.settings_last_updated = currentSettingsTimestamp;
-                            chessState.settings_update_source = 'external_board';
-                        } else {
-                            console.log('Userscript settings are older, only updating non-visual settings');
-
-                            // Only update non-visual settings
-                            for (const key in data) {
-                                if (!visualSettingsKeys.includes(key)) {
-                                    chessState[key] = data[key];
-                                }
+                        // Copy only non-visual settings
+                        for (const key in data) {
+                            if (!visualSettingsKeys.includes(key)) {
+                                chessState[key] = data[key];
                             }
                         }
                     }
                     // If the incoming settings are from the userscript and are newer than our current settings
                     else if (incomingSource === 'userscript' && incomingSettingsTimestamp > currentSettingsTimestamp) {
                         console.log('Applying newer settings from userscript');
-
-                        // Update all settings
-                        for (const key in data) {
-                            chessState[key] = data[key];
-                        }
-
-                        // Update UI controls to reflect the new settings
-                        setTimeout(() => {
-                            updateUIControls();
-                        }, 100);
+                        chessState = data;
                     }
-                    // Otherwise, update everything except visual settings if we're in the middle of a change
+                    // Otherwise, update everything
                     else {
-                        console.log('Updating state with standard rules');
-
-                        // If we're not updating settings, update everything
-                        if (!isUpdatingSettings) {
-                            for (const key in data) {
-                                chessState[key] = data[key];
-                            }
-                        }
-                        // If we are updating settings, only update non-visual settings
-                        else {
-                            for (const key in data) {
-                                if (!visualSettingsKeys.includes(key)) {
-                                    chessState[key] = data[key];
-                                }
-                            }
-                        }
+                        chessState = data;
                     }
 
                     // Update the UI
@@ -1060,6 +1123,19 @@
                         document.getElementById('depth-value').textContent = chessState.depth;
                         document.getElementById('elo').value = chessState.elo;
                         document.getElementById('elo-value').textContent = chessState.elo;
+
+                        // Update automation settings
+                        document.getElementById('auto-move-toggle').checked = chessState.auto_move;
+                        document.getElementById('auto-run-toggle').checked = chessState.auto_run;
+
+                        // Update auto run delay
+                        const minDelayInput = document.getElementById('auto-run-delay-min');
+                        const maxDelayInput = document.getElementById('auto-run-delay-max');
+                        const delayContainer = document.getElementById('auto-run-delay-container');
+
+                        minDelayInput.value = chessState.auto_run_delay_min.toFixed(1);
+                        maxDelayInput.value = chessState.auto_run_delay_max.toFixed(1);
+                        delayContainer.style.display = chessState.auto_run ? 'block' : 'none';
 
                         // Update visual settings
                         document.getElementById('move-indicator-location').value = chessState.move_indicator_location;
@@ -1143,61 +1219,6 @@
                 });
         }
 
-        // Function to update UI controls based on current state
-        function updateUIControls() {
-            // Only update if we're not currently in the middle of a settings change
-            if (isUpdatingSettings) {
-                console.log('Skipping UI update while settings are being updated');
-                return;
-            }
-
-            console.log('Updating UI controls to match current state');
-
-            // Update engine settings
-            document.getElementById('depth').value = chessState.depth;
-            document.getElementById('depth-value').textContent = chessState.depth;
-            document.getElementById('elo').value = chessState.elo;
-            document.getElementById('elo-value').textContent = chessState.elo;
-
-            // Update visual settings
-            document.getElementById('move-indicator-location').value = chessState.move_indicator_location;
-            document.getElementById('move-indicator-type').value = chessState.move_indicator_type;
-            document.getElementById('show-multiple-moves').checked = chessState.show_multiple_moves;
-
-            // Show/hide multiple moves options
-            if (chessState.show_multiple_moves) {
-                document.getElementById('multiple-moves-options').style.display = 'flex';
-                document.getElementById('multiple-moves-color-option').style.display = 'flex';
-            } else {
-                document.getElementById('multiple-moves-options').style.display = 'none';
-                document.getElementById('multiple-moves-color-option').style.display = 'none';
-            }
-
-            // Update number of moves slider
-            document.getElementById('number-of-moves').value = chessState.number_of_moves_to_show;
-            document.getElementById('number-of-moves-value').textContent = chessState.number_of_moves_to_show;
-
-            // Update multicolor moves checkbox
-            document.getElementById('use-multicolor-moves').checked = chessState.use_multicolor_moves;
-
-            // Show/hide arrow options based on move indicator type
-            if (chessState.move_indicator_type === 'arrows') {
-                document.getElementById('arrow-options').style.display = 'flex';
-                document.getElementById('arrow-animation-option').style.display = 'flex';
-            } else {
-                document.getElementById('arrow-options').style.display = 'none';
-                document.getElementById('arrow-animation-option').style.display = 'none';
-            }
-
-            // Update arrow style and animation
-            document.getElementById('arrow-style').value = chessState.arrow_style;
-            document.getElementById('arrow-animation').checked = chessState.arrow_animation;
-
-            // Update evaluation bar colors
-            document.getElementById('white-advantage-color').value = chessState.white_advantage_color;
-            document.getElementById('black-advantage-color').value = chessState.black_advantage_color;
-        }
-
         // Initialize the page
         window.onload = function() {
             initializeChessBoard();
@@ -1213,14 +1234,83 @@
                 sendCommand('stop_engine');
             });
 
-            document.getElementById('auto-move').addEventListener('click', function() {
+            // Add event listeners for toggle switches
+            document.getElementById('auto-move-toggle').addEventListener('change', function() {
                 sendCommand('toggle_auto_move');
-                this.classList.toggle('active');
+                // UI will be updated when we receive the state update
             });
 
-            document.getElementById('auto-run').addEventListener('click', function() {
+            document.getElementById('auto-run-toggle').addEventListener('change', function() {
                 sendCommand('toggle_auto_run');
-                this.classList.toggle('active');
+                // Show/hide the delay slider based on auto run state
+                document.getElementById('auto-run-delay-container').style.display =
+                    this.checked ? 'block' : 'none';
+                // UI will be updated when we receive the state update
+            });
+
+            // Add event listeners for auto run delay inputs
+            // Input validation function
+            function validateDelayInput(input) {
+                // Allow only numbers and a single decimal point
+                input.value = input.value.replace(/[^0-9.]/g, '');
+
+                // Ensure only one decimal point
+                const parts = input.value.split('.');
+                if (parts.length > 2) {
+                    input.value = parts[0] + '.' + parts.slice(1).join('');
+                }
+            }
+
+            // Add input event listeners for validation
+            document.getElementById('auto-run-delay-min').addEventListener('input', function() {
+                validateDelayInput(this);
+            });
+
+            document.getElementById('auto-run-delay-max').addEventListener('input', function() {
+                validateDelayInput(this);
+            });
+
+            // Add change event listeners for updating the server
+            document.getElementById('auto-run-delay-min').addEventListener('change', function() {
+                let minDelay = parseFloat(this.value);
+
+                // Basic validation - just ensure it's a number
+                if (isNaN(minDelay)) {
+                    minDelay = 0.1;
+                    this.value = minDelay;
+                }
+
+                // Ensure min doesn't exceed max
+                const maxDelay = parseFloat(document.getElementById('auto-run-delay-max').value);
+                if (minDelay > maxDelay) {
+                    document.getElementById('auto-run-delay-max').value = minDelay;
+                }
+
+                sendCommand('update_auto_run_delay', {
+                    min_delay: minDelay,
+                    max_delay: Math.max(minDelay, maxDelay)
+                });
+            });
+
+            document.getElementById('auto-run-delay-max').addEventListener('change', function() {
+                let maxDelay = parseFloat(this.value);
+
+                // Basic validation - just ensure it's a number
+                if (isNaN(maxDelay)) {
+                    maxDelay = 1.0;
+                    this.value = maxDelay;
+                }
+
+                // Ensure max doesn't go below min
+                const minDelay = parseFloat(document.getElementById('auto-run-delay-min').value);
+                if (maxDelay < minDelay) {
+                    document.getElementById('auto-run-delay-min').value = maxDelay;
+                }
+
+                sendCommand('update_auto_run_delay', {
+                    min_delay: Math.min(minDelay, maxDelay),
+                    max_delay: maxDelay
+                });
             });
 
             // Add event listeners for settings tabs
@@ -1412,10 +1502,6 @@
                     source: 'external_board'
                 };
 
-                // Create a unique transaction ID for this update
-                const transactionId = `ext_${Math.floor(Math.random() * 1000000)}`;
-                chessState.settings_transaction_id = transactionId;
-
                 // Send the command with the updated settings
                 sendCommand('update_visual_settings', {
                     move_indicator_location: chessState.move_indicator_location,
@@ -1427,57 +1513,17 @@
                     arrow_animation: chessState.arrow_animation,
                     white_advantage_color: chessState.white_advantage_color,
                     black_advantage_color: chessState.black_advantage_color,
-                    arrow_opacity: chessState.arrow_opacity,
-                    persistent_highlights: chessState.persistent_highlights,
                     // Include synchronization metadata
                     settings_last_updated: currentTime,
-                    settings_update_source: 'external_board',
-                    settings_transaction_id: transactionId
+                    settings_update_source: 'external_board'
                 }).then(response => {
                     console.log('Visual settings sent to userscript:', response);
 
-                    // Wait for acknowledgment from the userscript
-                    let checkCount = 0;
-                    const maxChecks = 10;
-                    const checkInterval = 200; // ms
-
-                    function checkForAcknowledgment() {
-                        fetch('/api/state')
-                            .then(response => response.json())
-                            .then(data => {
-                                // Check if the userscript has acknowledged our update
-                                if (data.settings_transaction_id === transactionId &&
-                                    data.settings_update_source === 'userscript' &&
-                                    data.settings_acknowledged === true) {
-
-                                    console.log('Userscript acknowledged our settings update');
-                                    isUpdatingSettings = false;
-                                    console.log('Settings update complete, resuming normal operation');
-                                } else if (checkCount < maxChecks) {
-                                    // Try again
-                                    checkCount++;
-                                    setTimeout(checkForAcknowledgment, checkInterval);
-                                } else {
-                                    // Give up after max checks
-                                    console.log('No acknowledgment received from userscript, resuming normal operation');
-                                    isUpdatingSettings = false;
-                                }
-                            })
-                            .catch(error => {
-                                console.error('Error checking for acknowledgment:', error);
-                                if (checkCount < maxChecks) {
-                                    // Try again
-                                    checkCount++;
-                                    setTimeout(checkForAcknowledgment, checkInterval);
-                                } else {
-                                    // Give up after max checks
-                                    isUpdatingSettings = false;
-                                }
-                            });
-                    }
-
-                    // Start checking for acknowledgment
-                    setTimeout(checkForAcknowledgment, 500);
+                    // Clear the updating flag after a short delay to allow the update to propagate
+                    setTimeout(() => {
+                        isUpdatingSettings = false;
+                        console.log('Settings update complete, resuming normal operation');
+                    }, 1000);
                 }).catch(error => {
                     console.error('Error sending visual settings:', error);
                     isUpdatingSettings = false;

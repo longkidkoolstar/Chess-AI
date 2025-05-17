@@ -37,13 +37,22 @@ chess_state = {
     "black_advantage_color": "#F44336",
     "arrow_opacity": 0.8,
 
+    # Automation settings
+    "auto_move": False,
+    "auto_run": False,
+    "auto_run_delay_min": 0.1,  # Minimum delay in seconds
+    "auto_run_delay_max": 1.0,  # Maximum delay in seconds
+
     # Settings synchronization metadata
     "settings_last_updated": time.time(),
     "settings_update_source": "server",
     "visual_settings": {
         "timestamp": time.time(),
         "source": "server"
-    }
+    },
+
+    # Command queue for userscript
+    "pending_commands": []
 }
 
 # Create a directory for the web files if it doesn't exist
@@ -294,11 +303,121 @@ html_content = """<!DOCTYPE html>
                     <button id="run-engine">Run Engine Analysis</button>
                     <button id="stop-engine" disabled>Stop Engine</button>
                 </div>
-                <div class="control-row">
-                    <button id="auto-move">Auto Move</button>
-                    <button id="auto-run">Auto Run</button>
+
+                <div style="margin-top: 20px; border: 1px solid #eee; border-radius: 8px; padding: 15px;">
+                    <h3 style="margin-top: 0; color: #333; font-size: 16px; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 15px;">Automation Settings</h3>
+
+                    <!-- Auto Move Toggle -->
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px;">
+                        <div>
+                            <label for="auto-move-toggle" style="font-weight: bold; color: #4CAF50;">Auto Move</label>
+                            <div style="font-size: 12px; color: #666;">Automatically plays the best move</div>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="auto-move-toggle">
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+
+                    <!-- Auto Run Toggle -->
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px;">
+                        <div>
+                            <label for="auto-run-toggle" style="font-weight: bold; color: #FF9800;">Auto Run</label>
+                            <div style="font-size: 12px; color: #666;">Automatically analyzes when it's your turn</div>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="auto-run-toggle">
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+
+                    <!-- Auto Run Delay Settings -->
+                    <div id="auto-run-delay-container" style="margin-top: 15px; display: none;">
+                        <div style="font-weight: bold; margin-bottom: 10px;">Auto Run Delay (seconds):</div>
+
+                        <!-- Min Delay -->
+                        <div style="display: flex; align-items: center; margin-bottom: 10px;">
+                            <label for="auto-run-delay-min" style="width: 80px;">Minimum:</label>
+                            <input type="number" id="auto-run-delay-min" min="0.1" max="3.0" step="0.1" value="0.1" style="width: 80px; padding: 5px; border: 1px solid #ccc; border-radius: 4px;">
+                            <span style="margin-left: 5px;">seconds</span>
+                        </div>
+
+                        <!-- Max Delay -->
+                        <div style="display: flex; align-items: center; margin-bottom: 5px;">
+                            <label for="auto-run-delay-max" style="width: 80px;">Maximum:</label>
+                            <input type="number" id="auto-run-delay-max" min="0.1" max="3.0" step="0.1" value="1.0" style="width: 80px; padding: 5px; border: 1px solid #ccc; border-radius: 4px;">
+                            <span style="margin-left: 5px;">seconds</span>
+                        </div>
+
+                        <div style="font-size: 12px; color: #666; margin-top: 8px; font-style: italic;">
+                            Random delay between min and max to simulate human thinking time
+                        </div>
+                    </div>
                 </div>
             </div>
+
+            <style>
+                /* Toggle Switch Styles */
+                .switch {
+                    position: relative;
+                    display: inline-block;
+                    width: 60px;
+                    height: 34px;
+                }
+
+                .switch input {
+                    opacity: 0;
+                    width: 0;
+                    height: 0;
+                }
+
+                .slider {
+                    position: absolute;
+                    cursor: pointer;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background-color: #ccc;
+                    transition: .4s;
+                }
+
+                .slider:before {
+                    position: absolute;
+                    content: "";
+                    height: 26px;
+                    width: 26px;
+                    left: 4px;
+                    bottom: 4px;
+                    background-color: white;
+                    transition: .4s;
+                }
+
+                input:checked + .slider {
+                    background-color: #2196F3;
+                }
+
+                input:checked + .slider:before {
+                    transform: translateX(26px);
+                }
+
+                .slider.round {
+                    border-radius: 34px;
+                }
+
+                .slider.round:before {
+                    border-radius: 50%;
+                }
+
+                /* Color specific toggles */
+                #auto-move-toggle:checked + .slider {
+                    background-color: #4CAF50;
+                }
+
+                #auto-run-toggle:checked + .slider {
+                    background-color: #FF9800;
+                }
+            </style>
 
             <div id="settings">
                 <h3>Settings</h3>
@@ -455,6 +574,12 @@ html_content = """<!DOCTYPE html>
             // Evaluation bar colors
             white_advantage_color: "#4CAF50",
             black_advantage_color: "#F44336",
+
+            // Automation settings
+            auto_move: false,
+            auto_run: false,
+            auto_run_delay_min: 0.1,
+            auto_run_delay_max: 1.0,
 
             // Settings synchronization metadata
             settings_last_updated: 0,
@@ -1060,6 +1185,19 @@ html_content = """<!DOCTYPE html>
                         document.getElementById('elo').value = chessState.elo;
                         document.getElementById('elo-value').textContent = chessState.elo;
 
+                        // Update automation settings
+                        document.getElementById('auto-move-toggle').checked = chessState.auto_move;
+                        document.getElementById('auto-run-toggle').checked = chessState.auto_run;
+
+                        // Update auto run delay
+                        const minDelayInput = document.getElementById('auto-run-delay-min');
+                        const maxDelayInput = document.getElementById('auto-run-delay-max');
+                        const delayContainer = document.getElementById('auto-run-delay-container');
+
+                        minDelayInput.value = chessState.auto_run_delay_min.toFixed(1);
+                        maxDelayInput.value = chessState.auto_run_delay_max.toFixed(1);
+                        delayContainer.style.display = chessState.auto_run ? 'block' : 'none';
+
                         // Update visual settings
                         document.getElementById('move-indicator-location').value = chessState.move_indicator_location;
                         document.getElementById('move-indicator-type').value = chessState.move_indicator_type;
@@ -1157,14 +1295,89 @@ html_content = """<!DOCTYPE html>
                 sendCommand('stop_engine');
             });
 
-            document.getElementById('auto-move').addEventListener('click', function() {
+            // Add event listeners for toggle switches
+            document.getElementById('auto-move-toggle').addEventListener('change', function() {
                 sendCommand('toggle_auto_move');
-                this.classList.toggle('active');
+                // UI will be updated when we receive the state update
             });
 
-            document.getElementById('auto-run').addEventListener('click', function() {
+            document.getElementById('auto-run-toggle').addEventListener('change', function() {
                 sendCommand('toggle_auto_run');
-                this.classList.toggle('active');
+                // Show/hide the delay slider based on auto run state
+                document.getElementById('auto-run-delay-container').style.display =
+                    this.checked ? 'block' : 'none';
+                // UI will be updated when we receive the state update
+            });
+
+            // Add event listeners for auto run delay inputs
+            // Input validation function
+            function validateDelayInput(input) {
+                // Allow only numbers and a single decimal point
+                input.value = input.value.replace(/[^0-9.]/g, '');
+
+                // Ensure only one decimal point
+                const parts = input.value.split('.');
+                if (parts.length > 2) {
+                    input.value = parts[0] + '.' + parts.slice(1).join('');
+                }
+            }
+
+            // Add input event listeners for validation
+            document.getElementById('auto-run-delay-min').addEventListener('input', function() {
+                validateDelayInput(this);
+            });
+
+            document.getElementById('auto-run-delay-max').addEventListener('input', function() {
+                validateDelayInput(this);
+            });
+
+            // Add change event listeners for updating the server
+            document.getElementById('auto-run-delay-min').addEventListener('change', function() {
+                let minDelay = parseFloat(this.value);
+
+                // Validate input
+                if (isNaN(minDelay) || minDelay < 0.1) {
+                    minDelay = 0.1;
+                    this.value = minDelay;
+                } else if (minDelay > 3.0) {
+                    minDelay = 3.0;
+                    this.value = minDelay;
+                }
+
+                // Ensure min doesn't exceed max
+                const maxDelay = parseFloat(document.getElementById('auto-run-delay-max').value);
+                if (minDelay > maxDelay) {
+                    document.getElementById('auto-run-delay-max').value = minDelay;
+                }
+
+                sendCommand('update_auto_run_delay', {
+                    min_delay: minDelay,
+                    max_delay: Math.max(minDelay, maxDelay)
+                });
+            });
+
+            document.getElementById('auto-run-delay-max').addEventListener('change', function() {
+                let maxDelay = parseFloat(this.value);
+
+                // Validate input
+                if (isNaN(maxDelay) || maxDelay < 0.1) {
+                    maxDelay = 0.1;
+                    this.value = maxDelay;
+                } else if (maxDelay > 3.0) {
+                    maxDelay = 3.0;
+                    this.value = maxDelay;
+                }
+
+                // Ensure max doesn't go below min
+                const minDelay = parseFloat(document.getElementById('auto-run-delay-min').value);
+                if (maxDelay < minDelay) {
+                    document.getElementById('auto-run-delay-min').value = maxDelay;
+                }
+
+                sendCommand('update_auto_run_delay', {
+                    min_delay: Math.min(minDelay, maxDelay),
+                    max_delay: maxDelay
+                });
             });
 
             // Add event listeners for settings tabs
@@ -1414,7 +1627,18 @@ class ChessAIHandler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps({"status": "running"}).encode())
             elif parsed_url.path == '/api/state':
                 # Return the current chess state
-                self.wfile.write(json.dumps(chess_state).encode())
+                # Create a copy without the pending_commands to avoid exposing them
+                state_copy = {k: v for k, v in chess_state.items() if k != 'pending_commands'}
+                self.wfile.write(json.dumps(state_copy).encode())
+            elif parsed_url.path == '/api/pending_commands':
+                # Return any pending commands for the userscript
+                commands = chess_state.get('pending_commands', [])
+                response = {
+                    "commands": commands
+                }
+                # Clear the pending commands after sending them
+                chess_state['pending_commands'] = []
+                self.wfile.write(json.dumps(response).encode())
             else:
                 self.wfile.write(json.dumps({"error": "Unknown API endpoint"}).encode())
         else:
@@ -1449,10 +1673,80 @@ class ChessAIHandler(http.server.SimpleHTTPRequestHandler):
                 if command == 'run_engine':
                     chess_state['engine_running'] = True
                     chess_state['depth'] = data.get('depth', chess_state['depth'])
+
+                    # Add the command to the pending commands queue for the userscript
+                    chess_state['pending_commands'].append({
+                        'command': 'run_engine',
+                        'params': {
+                            'depth': chess_state['depth']
+                        },
+                        'timestamp': time.time()
+                    })
+
                     response = {"status": "success", "message": f"Engine started with depth {chess_state['depth']}"}
                 elif command == 'stop_engine':
                     chess_state['engine_running'] = False
+
+                    # Add the command to the pending commands queue for the userscript
+                    chess_state['pending_commands'].append({
+                        'command': 'stop_engine',
+                        'params': {},
+                        'timestamp': time.time()
+                    })
+
                     response = {"status": "success", "message": "Engine stopped"}
+                elif command == 'toggle_auto_move':
+                    # Toggle the auto move state
+                    chess_state['auto_move'] = not chess_state['auto_move']
+
+                    # Add the command to the pending commands queue for the userscript
+                    chess_state['pending_commands'].append({
+                        'command': 'toggle_auto_move',
+                        'params': {
+                            'state': chess_state['auto_move']
+                        },
+                        'timestamp': time.time()
+                    })
+
+                    response = {"status": "success", "message": f"Auto move {'enabled' if chess_state['auto_move'] else 'disabled'}"}
+                elif command == 'toggle_auto_run':
+                    # Toggle the auto run state
+                    chess_state['auto_run'] = not chess_state['auto_run']
+
+                    # Add the command to the pending commands queue for the userscript
+                    chess_state['pending_commands'].append({
+                        'command': 'toggle_auto_run',
+                        'params': {
+                            'state': chess_state['auto_run']
+                        },
+                        'timestamp': time.time()
+                    })
+
+                    response = {"status": "success", "message": f"Auto run {'enabled' if chess_state['auto_run'] else 'disabled'}"}
+                elif command == 'update_auto_run_delay':
+                    # Update the auto run delay
+                    params = data.get('params', {})
+                    min_delay = params.get('min_delay', 0.1)
+                    max_delay = params.get('max_delay', 1.0)
+
+                    # Ensure min doesn't exceed max
+                    if min_delay > max_delay:
+                        min_delay = max_delay
+
+                    chess_state['auto_run_delay_min'] = min_delay
+                    chess_state['auto_run_delay_max'] = max_delay
+
+                    # Add the command to the pending commands queue for the userscript
+                    chess_state['pending_commands'].append({
+                        'command': 'update_auto_run_delay',
+                        'params': {
+                            'min_delay': min_delay,
+                            'max_delay': max_delay
+                        },
+                        'timestamp': time.time()
+                    })
+
+                    response = {"status": "success", "message": f"Auto run delay updated to {min_delay}-{max_delay} seconds"}
                 elif command == 'update_visual_settings':
                     # Handle visual settings update from the external board
                     print("Received visual settings update from external board")
@@ -1480,6 +1774,13 @@ class ChessAIHandler(http.server.SimpleHTTPRequestHandler):
                         'timestamp': current_time,
                         'source': 'external_board'
                     }
+
+                    # Add the command to the pending commands queue for the userscript
+                    chess_state['pending_commands'].append({
+                        'command': 'update_visual_settings',
+                        'params': params,
+                        'timestamp': current_time
+                    })
 
                     print(f"Updated visual settings from external board (timestamp: {current_time})")
 
