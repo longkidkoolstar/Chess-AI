@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Chess AI
 // @namespace    github.com/longkidkoolstar
-// @version      1.2.1
+// @version      2.0.0
 // @description  Chess.com Bot/Cheat that finds the best move with evaluation bar and ELO control!
 // @author       longkidkoolstar
 // @license      none
@@ -11,14 +11,16 @@
 // @grant       GM.getValue
 // @grant       GM.setValue
 // @grant       GM.getResourceText
+// @grant       GM.download
 // @resource    stockfish.js        https://raw.githubusercontent.com/longkidkoolstar/stockfish/refs/heads/main/stockfish.js
 // @require     https://greasyfork.org/scripts/445697/code/index.js
 // @require     https://code.jquery.com/jquery-3.6.0.min.js
+// @connect     localhost
 // @run-at      document-start
 // ==/UserScript==
 
 
-const currentVersion = '1.2.1'; // Updated version number
+const currentVersion = '2.0.0'; // Updated version number
 
 function main() {
 
@@ -36,6 +38,12 @@ function main() {
     myVars.showMultipleMoves = false; // Default to showing only the best move
     myVars.numberOfMovesToShow = 3; // Default number of top moves to show
     myVars.useMulticolorMoves = false; // Default to using opacity for move strength
+    myVars.useExternalWindow = false; // Default to not using external window
+    myVars.externalWindowOpen = false; // Track if external window is open
+    myVars.externalWindowRef = null; // Reference to external window
+    myVars.serverConnected = false; // Track if connected to local server
+    myVars.moveIndicatorLocation = 'main'; // Where to show move indicators: 'main', 'external', or 'both'
+    myVars.disableMainControls = false; // Option to disable main controls when connected to external window
     // Default colors for multicolor mode
     myVars.moveColors = {
         1: '#F44336', // Red for best move
@@ -45,6 +53,85 @@ function main() {
         5: '#2196F3'  // Blue for 5th best
     }
     var myFunctions = document.myFunctions = {};
+
+    // Function to download the Python server using GM.download with fallback
+    myFunctions.downloadServer = function() {
+        const serverUrl = 'https://raw.githubusercontent.com/longkidkoolstar/Chess-AI/refs/heads/main/chess_ai_server.py';
+        const filename = 'chess_ai_server.py';
+
+        // Show download notification
+        const notification = document.createElement('div');
+        notification.textContent = 'Downloading server file...';
+        notification.style = `
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background-color: #2196F3;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 4px;
+            z-index: 9999;
+            opacity: 0;
+            transition: opacity 0.3s;
+        `;
+        document.body.appendChild(notification);
+
+        setTimeout(() => {
+            notification.style.opacity = '1';
+        }, 10);
+
+        // Try to use GM.download if available
+        try {
+            if (typeof GM.download === 'function') {
+                console.log('Using GM.download to download server file');
+
+                GM.download({
+                    url: serverUrl,
+                    name: filename,
+                    onload: function() {
+                        // Update notification to show success
+                        notification.textContent = 'Server file downloaded successfully!';
+                        notification.style.backgroundColor = '#4CAF50';
+
+                        setTimeout(() => {
+                            notification.style.opacity = '0';
+                            setTimeout(() => {
+                                document.body.removeChild(notification);
+                            }, 300);
+                        }, 2000);
+                    },
+                    onerror: function() {
+                        console.error('GM.download failed, falling back to direct download');
+                        // Fall back to direct download
+                        fallbackDownload();
+                    }
+                });
+            } else {
+                console.log('GM.download not available, using fallback method');
+                fallbackDownload();
+            }
+        } catch (error) {
+            console.error('Error using GM.download:', error);
+            fallbackDownload();
+        }
+
+        // Fallback download method using window.open
+        function fallbackDownload() {
+            // Open the URL in a new tab
+            window.open(serverUrl, '_blank');
+
+            // Update notification to show instructions
+            notification.innerHTML = 'Please save the file as <strong>chess_ai_server.py</strong> when prompted';
+            notification.style.backgroundColor = '#FF9800';
+
+            setTimeout(() => {
+                notification.style.opacity = '0';
+                setTimeout(() => {
+                    document.body.removeChild(notification);
+                }, 300);
+            }, 5000);
+        }
+    };
 
     // Create evaluation bar
     var evalBar = null;
@@ -232,6 +319,10 @@ function main() {
         var res1 = response.substring(0, 2);
         var res2 = response.substring(2, 4);
 
+        // Store the best move for server updates
+        myVars.bestMove = res1 + res2;
+        console.log('Best move set to:', myVars.bestMove);
+
         // Add the move to history
         const moveNotation = res1 + '-' + res2;
         myFunctions.addMoveToHistory(moveNotation, myVars.currentEvaluation, lastValue);
@@ -242,6 +333,11 @@ function main() {
 
         // Also clear virtual chessboard indicators
         myFunctions.clearVirtualMoveIndicators();
+
+        // Update the server if external window is open
+        if (myVars.useExternalWindow && myVars.externalWindowOpen && myVars.serverConnected) {
+            myFunctions.sendServerUpdate();
+        }
 
         if(myVars.autoMove == true){
             myFunctions.movePiece(res1, res2);
@@ -974,6 +1070,23 @@ function main() {
 
     // Function to draw an arrow on the chess board
     myFunctions.drawArrow = function(fromSquare, toSquare, isPersistent, customOpacity, customColor) {
+        // Store the move information for the server
+        if (!myVars.bestMove) {
+            myVars.bestMove = fromSquare + toSquare;
+            console.log('Setting best move for server:', myVars.bestMove);
+        }
+
+        // Always update the server if external window is open
+        if (myVars.useExternalWindow && myVars.externalWindowOpen && myVars.serverConnected) {
+            console.log('Sending move to server:', fromSquare + toSquare);
+            myFunctions.sendServerUpdate();
+        }
+
+        // Check if we should show arrows on the main board
+        if (myVars.moveIndicatorLocation !== 'main' && myVars.moveIndicatorLocation !== 'both') {
+            return;
+        }
+
         // Get the board element and its dimensions
         const boardElement = $(board.nodeName)[0];
         const boardRect = boardElement.getBoundingClientRect();
@@ -1439,6 +1552,9 @@ function main() {
             console.log('Best move:', bestMove);
             console.log('Top moves before reset:', myVars.topMoves ? myVars.topMoves.length : 0);
 
+            // Store the best move for server updates
+            myVars.bestMove = bestMove;
+
             // If human mode is active, simulate human play
             if(myVars.humanMode && myVars.humanMode.active && myVars.alternativeMoves && myVars.alternativeMoves.length > 0) {
                 // Get the alternative moves (excluding the best move)
@@ -1474,20 +1590,27 @@ function main() {
 
                 // Clear the thinking flag immediately to prevent multiple calls
                 isThinking = false;
+                myVars.engineRunning = false;
             } else {
                 // Normal engine play (no human simulation)
                 myFunctions.color(bestMove);
                 isThinking = false;
+                myVars.engineRunning = false;
 
                 // Update auto run status if auto run is enabled
                 if (myVars.autoRun) {
                     myFunctions.updateAutoRunStatus('on');
                 }
 
-                // Reset alternative moves and top moves for next turn
+                // Keep top moves for display on external board
+                // Only reset alternative moves
                 myVars.alternativeMoves = [];
-                myVars.topMoves = [];
-                console.log('Top moves reset to empty array');
+                console.log('Preserving top moves for external board:', myVars.topMoves);
+            }
+
+            // Update the server if external window is open
+            if (myVars.useExternalWindow && myVars.externalWindowOpen && myVars.serverConnected) {
+                myFunctions.sendServerUpdate();
             }
         }
         // Parse evaluation information
@@ -1508,6 +1631,11 @@ function main() {
 
                     // Update depth info in evaluation text
                     updateEvalBar(evalValue, null, currentDepth);
+
+                    // Update the server if external window is open
+                    if (myVars.useExternalWindow && myVars.externalWindowOpen && myVars.serverConnected) {
+                        myFunctions.sendServerUpdate();
+                    }
                 }
             } catch (err) {
                 console.log('Error parsing evaluation:', err);
@@ -1531,6 +1659,11 @@ function main() {
                     }
 
                     updateEvalBar(movesToMate > 0 ? 20 : -20, evalText, currentDepth); // Use a large value to show mate
+
+                    // Update the server if external window is open
+                    if (myVars.useExternalWindow && myVars.externalWindowOpen && myVars.serverConnected) {
+                        myFunctions.sendServerUpdate();
+                    }
                 }
             } catch (err) {
                 console.log('Error parsing mate:', err);
@@ -2075,6 +2208,7 @@ function main() {
         engine.engine.postMessage(`position fen ${fen}`);
         console.log('updated: ' + `position fen ${fen}`);
         isThinking = true;
+        myVars.engineRunning = true; // Set engine running flag for server updates
         engine.engine.postMessage(`go depth ${depth}`);
         lastValue = depth;
 
@@ -2092,6 +2226,14 @@ function main() {
         // Update the slider value to match
         if ($('#depthSlider')[0]) {
             $('#depthSlider')[0].value = depth;
+        }
+
+        // Update the server if external window is open
+        if (myVars.useExternalWindow && myVars.externalWindowOpen && myVars.serverConnected) {
+            // Store the current FEN for server updates
+            myVars.chess = { fen: function() { return fen; } };
+            myVars.bestMove = ''; // Reset best move
+            myFunctions.sendServerUpdate();
         }
     }
 
@@ -2867,8 +3009,42 @@ function main() {
                             <input type="checkbox" id="useVirtualChessboard" name="useVirtualChessboard" value="false" style="margin-right: 8px;">
                             <label for="useVirtualChessboard"> Use virtual chessboard for move suggestions</label>
                         </div>
-                        <div style="font-size: 12px; color: #666; margin-top: 5px; font-style: italic;">
+                        <div style="font-size: 12px; color: #666; margin-top: 5px; margin-bottom: 15px; font-style: italic;">
                             Displays move suggestions on a virtual chessboard in the Actions tab instead of overlaying them on the main board (helps avoid detection)
+                        </div>
+
+                        <div style="display: flex; align-items: center; margin-bottom: 12px; border-top: 1px solid #eee; padding-top: 10px;">
+                            <input type="checkbox" id="useExternalWindow" name="useExternalWindow" value="false" style="margin-right: 8px;">
+                            <label for="useExternalWindow"> Open GUI in external window</label>
+                        </div>
+                        <div style="font-size: 12px; color: #666; margin-top: 5px; font-style: italic;">
+                            Opens the Chess AI controls in a separate window or tab (requires local Python server)
+                            <br><a href="#" id="downloadServerLink" style="color: #2196F3; text-decoration: underline;">Download the chess_ai_server.py file here</a>
+                        </div>
+                        <div id="externalWindowOptions" style="display: none; margin-top: 10px; padding: 10px; background-color: #f8f8f8; border-radius: 4px;">
+                            <button id="startServerBtn" style="padding: 8px 12px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px;">Start Local Server</button>
+                            <button id="openExternalWindowBtn" style="padding: 8px 12px; background-color: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer;">Open External Window</button>
+                            <div id="serverStatus" style="margin-top: 8px; font-size: 12px; color: #666;">
+                                Server Status: <span id="serverStatusText">Not Running</span>
+                            </div>
+
+                            <div style="margin-top: 15px; border-top: 1px solid #ddd; padding-top: 10px;">
+                                <div style="font-weight: bold; margin-bottom: 8px;">Move Indicator Location:</div>
+                                <div style="display: flex; flex-direction: column; gap: 8px;">
+                                    <label style="display: flex; align-items: center;">
+                                        <input type="radio" name="moveIndicatorLocation" value="main" checked style="margin-right: 8px;">
+                                        Show on main board only
+                                    </label>
+                                    <label style="display: flex; align-items: center;">
+                                        <input type="radio" name="moveIndicatorLocation" value="external" style="margin-right: 8px;">
+                                        Show on external board only
+                                    </label>
+                                    <label style="display: flex; align-items: center;">
+                                        <input type="radio" name="moveIndicatorLocation" value="both" style="margin-right: 8px;">
+                                        Show on both boards
+                                    </label>
+                                </div>
+                            </div>
                         </div>
 
                         <div style="margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px;">
@@ -3948,6 +4124,9 @@ function main() {
             $('input[name="moveIndicatorType"]').on('change', function() {
                 myVars.moveIndicatorType = this.value;
 
+                // Update timestamp for settings synchronization
+                myVars.settings_last_updated = Date.now() / 1000;
+
                 // Clear any existing highlights and arrows when changing the indicator type
                 myFunctions.clearHighlights();
                 myFunctions.clearArrows();
@@ -3959,6 +4138,11 @@ function main() {
                 } else {
                     $('#arrowCustomizationContainer').slideUp(200);
                     $('#arrowAnimationContainer').slideUp(200);
+                }
+
+                // Update the server if external window is open
+                if (myVars.useExternalWindow && myVars.externalWindowOpen && myVars.serverConnected) {
+                    myFunctions.sendServerUpdate();
                 }
             });
 
@@ -3992,6 +4176,9 @@ function main() {
             $('#showMultipleMoves').on('change', function() {
                 myVars.showMultipleMoves = this.checked;
 
+                // Update timestamp for settings synchronization
+                myVars.settings_last_updated = Date.now() / 1000;
+
                 // Update status text
                 $('#showMultipleMovesStatus').text(this.checked ? 'On' : 'Off');
                 $('#showMultipleMovesStatus').css('color', this.checked ? '#4CAF50' : '#666');
@@ -4015,6 +4202,11 @@ function main() {
                 // Clear any existing highlights and arrows
                 myFunctions.clearHighlights();
                 myFunctions.clearArrows();
+
+                // Update the server if external window is open
+                if (myVars.useExternalWindow && myVars.externalWindowOpen && myVars.serverConnected) {
+                    myFunctions.sendServerUpdate();
+                }
             });
 
             // Add event listener for the number of moves slider
@@ -4031,6 +4223,9 @@ function main() {
             // Add event listener for the multicolor moves toggle
             $('#useMulticolorMoves').on('change', function() {
                 myVars.useMulticolorMoves = this.checked;
+
+                // Update timestamp for settings synchronization
+                myVars.settings_last_updated = Date.now() / 1000;
 
                 // Update status text
                 $('#useMulticolorMovesStatus').text(this.checked ? 'On' : 'Off');
@@ -4055,6 +4250,11 @@ function main() {
                 // Clear any existing highlights and arrows
                 myFunctions.clearHighlights();
                 myFunctions.clearArrows();
+
+                // Update the server if external window is open
+                if (myVars.useExternalWindow && myVars.externalWindowOpen && myVars.serverConnected) {
+                    myFunctions.sendServerUpdate();
+                }
             });
 
             // Add event listeners for the color pickers
@@ -4067,6 +4267,69 @@ function main() {
                     myFunctions.clearArrows();
                 });
             }
+
+            // Add event listener for the external window toggle
+            $('#useExternalWindow').on('change', function() {
+                myVars.useExternalWindow = this.checked;
+
+                // Show/hide external window options
+                if (this.checked) {
+                    $('#externalWindowOptions').slideDown(200);
+                } else {
+                    $('#externalWindowOptions').slideUp(200);
+
+                    // Close the external window if it's open
+                    if (myVars.externalWindowOpen && myVars.externalWindowRef) {
+                        myVars.externalWindowRef.close();
+                        myVars.externalWindowOpen = false;
+                        myVars.externalWindowRef = null;
+                    }
+                }
+            });
+
+            // Add event listener for the start server button
+            $('#startServerBtn').on('click', function() {
+                // Attempt to connect to the local server
+                myFunctions.checkServerConnection();
+            });
+
+            // Add event listener for the open external window button
+            $('#openExternalWindowBtn').on('click', function() {
+                myFunctions.openExternalWindow();
+            });
+
+            // Add event listener for the download server link
+            $('#downloadServerLink').on('click', function(e) {
+                e.preventDefault();
+                myFunctions.downloadServer();
+            });
+
+            // Add event listeners for move indicator location radio buttons
+            $('input[name="moveIndicatorLocation"]').on('change', function() {
+                myVars.moveIndicatorLocation = this.value;
+                console.log('Move indicator location set to:', this.value);
+
+                // Update timestamp for settings synchronization
+                myVars.settings_last_updated = Date.now() / 1000;
+
+                // Clear any existing highlights and arrows
+                myFunctions.clearHighlights();
+                myFunctions.clearArrows();
+
+                // If external window is open, update it
+                if (myVars.useExternalWindow && myVars.externalWindowOpen && myVars.serverConnected) {
+                    // Force an immediate update to the server
+                    myFunctions.sendServerUpdate();
+
+                    // If we're showing on the external board, run the engine to show the moves
+                    if (this.value === 'external' || this.value === 'both') {
+                        // Only run if we have a best move already
+                        if (myVars.bestMove) {
+                            console.log('Updating external board with current best move:', myVars.bestMove);
+                        }
+                    }
+                }
+            });
 
             // Improved visual feedback for toggle switches
             $('.switch input[type="checkbox"]').each(function() {
@@ -4279,8 +4542,660 @@ function main() {
         }
     }, 100);
 
-     // Function to save user settings using GM.setValue asynchronously
-     myFunctions.saveSettings = async function() {
+     // Function to check server connection
+    myFunctions.checkServerConnection = function() {
+        // Update server status
+        $('#serverStatusText').text('Checking...');
+
+        // Try to connect to the local server
+        fetch('http://localhost:8765/api/status')
+            .then(response => {
+                if (response.ok) {
+                    return response.json();
+                }
+                throw new Error('Server not responding');
+            })
+            .then(data => {
+                if (data.status === 'running') {
+                    $('#serverStatusText').text('Running');
+                    $('#serverStatusText').css('color', '#4CAF50');
+                    myVars.serverConnected = true;
+
+                    // Enable the open window button
+                    $('#openExternalWindowBtn').prop('disabled', false);
+
+                    // Apply main controls visibility based on current settings
+                    myFunctions.updateMainControlsVisibility();
+
+                    // Start sending updates to the server if the external window is open
+                    if (myVars.externalWindowOpen) {
+                        myFunctions.startServerUpdates();
+                    }
+                } else {
+                    $('#serverStatusText').text('Error: ' + data.status);
+                    $('#serverStatusText').css('color', '#F44336');
+                    myVars.serverConnected = false;
+                }
+            })
+            .catch(error => {
+                console.error('Server connection error:', error);
+                $('#serverStatusText').text('Not Running - Start Python Server');
+                $('#serverStatusText').css('color', '#F44336');
+                myVars.serverConnected = false;
+
+                // Show instructions for starting the server
+                const notification = document.createElement('div');
+                notification.innerHTML = `
+                    <p>To use the external window feature, you need to run the Python server:</p>
+                    <ol>
+                        <li><a href="#" id="downloadServerLink2" style="color: #2196F3; text-decoration: underline;">Download the chess_ai_server.py file</a> to your computer</li>
+                        <li>Open a command prompt or terminal</li>
+                        <li>Navigate to the folder containing the file</li>
+                        <li>Run: <code>python chess_ai_server.py</code></li>
+                    </ol>
+                    <p>Then click "Check Server Connection" again.</p>
+                `;
+                notification.style = `
+                    position: fixed;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    background-color: white;
+                    padding: 20px;
+                    border-radius: 8px;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+                    z-index: 10000;
+                    max-width: 400px;
+                    font-family: "Segoe UI", Arial, sans-serif;
+                `;
+
+                // Add close button
+                const closeBtn = document.createElement('button');
+                closeBtn.textContent = 'Close';
+                closeBtn.style = `
+                    padding: 8px 16px;
+                    background-color: #2196F3;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    margin-top: 10px;
+                `;
+                closeBtn.onclick = function() {
+                    document.body.removeChild(notification);
+                };
+                notification.appendChild(closeBtn);
+
+                document.body.appendChild(notification);
+
+                // Add event listener for the second download server link
+                $('#downloadServerLink2').on('click', function(e) {
+                    e.preventDefault();
+                    myFunctions.downloadServer();
+
+                    // Close the notification after starting the download
+                    document.body.removeChild(notification);
+                });
+            });
+    };
+
+    // Function to update the visibility of main controls based on settings
+    myFunctions.updateMainControlsVisibility = function() {
+        // Only apply this when connected to the external window
+        if (myVars.useExternalWindow && myVars.externalWindowOpen && myVars.serverConnected) {
+            const settingsContainer = $('#settingsContainer');
+
+            if (myVars.disableMainControls) {
+                console.log('Disabling main controls as requested by external window');
+
+                // Hide the main controls
+                if (settingsContainer.length) {
+                    settingsContainer.css('display', 'none');
+                }
+
+                // Create or update a notification to inform the user
+                let notification = $('#externalControlsNotification');
+                if (notification.length === 0) {
+                    notification = $('<div id="externalControlsNotification" style="position: fixed; top: 10px; right: 10px; background-color: rgba(33, 150, 243, 0.9); color: white; padding: 10px; border-radius: 5px; z-index: 9999; font-family: Arial, sans-serif; box-shadow: 0 2px 10px rgba(0,0,0,0.2); max-width: 300px;">' +
+                        '<div style="font-weight: bold; margin-bottom: 5px;">Chess AI Controls Disabled</div>' +
+                        '<div style="font-size: 12px;">Main controls are hidden while using the external window. Disable this option in the external window interface settings to show controls here again.</div>' +
+                        '</div>');
+                    $('body').append(notification);
+                } else {
+                    notification.show();
+                }
+            } else {
+                console.log('Enabling main controls as requested by external window');
+
+                // Show the main controls
+                if (settingsContainer.length) {
+                    settingsContainer.css('display', 'block');
+                }
+
+                // Hide the notification if it exists
+                $('#externalControlsNotification').hide();
+            }
+        } else {
+            // Always show controls when not connected to external window
+            const settingsContainer = $('#settingsContainer');
+            if (settingsContainer.length) {
+                settingsContainer.css('display', 'block');
+            }
+
+            // Hide the notification if it exists
+            $('#externalControlsNotification').hide();
+        }
+    };
+
+    // Function to send updates to the server
+    myFunctions.sendServerUpdate = function() {
+        if (!myVars.serverConnected || !myVars.externalWindowOpen) {
+            return;
+        }
+
+        // Get the current board position
+        const fen = myVars.chess ? myVars.chess.fen() : '';
+
+        // Debug log for top moves
+        console.log('Sending top moves to server:', myVars.topMoves);
+        if (myVars.topMoves && myVars.topMoves.length > 0) {
+            console.log('First move:', myVars.topMoves[0]);
+            if (myVars.topMoves.length > 1) {
+                console.log('Second move:', myVars.topMoves[1]);
+            }
+        }
+
+        // Add timestamp for settings synchronization
+        if (!myVars.settings_last_updated) {
+            myVars.settings_last_updated = Date.now() / 1000; // Convert to seconds to match Python's time.time()
+        }
+
+        // Prepare the data to send with all visual settings
+        const data = {
+            fen: fen,
+            evaluation: myVars.currentEvaluation,
+            best_move: myVars.bestMove || '',
+            engine_running: myVars.engineRunning || false,
+            top_moves: myVars.topMoves || [],
+            depth: parseInt($('#depthSlider')[0].value) || 11,
+            elo: myVars.eloRating || 1500,
+
+            // Settings synchronization metadata
+            settings_last_updated: myVars.settings_last_updated,
+            settings_update_source: 'userscript',
+
+            // Automation settings
+            auto_move: myVars.autoMove || false,
+            auto_run: myVars.autoRun || false,
+            auto_run_delay_min: myVars.delayMin || myVars.delay || 0.1,
+            auto_run_delay_max: myVars.delayMax || myVars.delay || 1.0,
+
+            // Interface settings
+            disable_main_controls: myVars.disableMainControls || false,
+
+            // Move indicator settings
+            move_indicator_location: myVars.moveIndicatorLocation || 'main',
+            move_indicator_type: myVars.moveIndicatorType || 'highlights',
+            persistent_highlights: myVars.persistentHighlights !== undefined ? myVars.persistentHighlights : true,
+
+            // Multiple moves settings
+            show_multiple_moves: myVars.showMultipleMoves !== undefined ? myVars.showMultipleMoves : false,
+            number_of_moves_to_show: myVars.numberOfMovesToShow || 3,
+            use_multicolor_moves: myVars.useMulticolorMoves !== undefined ? myVars.useMulticolorMoves : false,
+            move_colors: myVars.moveColors || {},
+
+            // Arrow settings
+            arrow_style: myVars.arrowStyle || 'curved',
+            arrow_animation: myVars.arrowAnimation !== undefined ? myVars.arrowAnimation : true,
+            arrow_color: myVars.arrowColor || '#0077CC',
+            arrow_opacity: 0.8,
+
+            // Evaluation bar colors
+            white_advantage_color: myVars.whiteAdvantageColor || '#4CAF50',
+            black_advantage_color: myVars.blackAdvantageColor || '#F44336'
+        };
+
+        // Send the data to the server
+        fetch('http://localhost:8765/api/update_state', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to update server state');
+            }
+            return response.json();
+        })
+        .then(data => {
+            // Server update successful
+            console.log('Server update successful:', data);
+        })
+        .catch(error => {
+            console.error('Error updating server:', error);
+
+            // If we can't connect to the server, mark as disconnected
+            if (myVars.serverConnected) {
+                myVars.serverConnected = false;
+                $('#serverStatusText').text('Connection Lost');
+                $('#serverStatusText').css('color', '#F44336');
+
+                // Stop the update interval
+                myFunctions.stopServerUpdates();
+            }
+        });
+    };
+
+    // Function to check for pending commands from the server
+    myFunctions.checkPendingCommands = function() {
+        if (!myVars.serverConnected || !myVars.externalWindowOpen) {
+            return;
+        }
+
+        // Fetch pending commands from the server
+        fetch('http://localhost:8765/api/pending_commands')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed to fetch pending commands');
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Process any pending commands
+                if (data.commands && data.commands.length > 0) {
+                    console.log('Received pending commands from server:', data.commands);
+
+                    // Process each command in order
+                    data.commands.forEach(commandData => {
+                        myFunctions.handleServerCommand(commandData.command, commandData.params);
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error checking pending commands:', error);
+
+                // If we can't connect to the server, mark as disconnected
+                if (myVars.serverConnected) {
+                    myVars.serverConnected = false;
+                    $('#serverStatusText').text('Connection Lost');
+                    $('#serverStatusText').css('color', '#F44336');
+
+                    // Stop the update intervals
+                    myFunctions.stopServerUpdates();
+                }
+            });
+    };
+
+    // Function to start sending updates to the server
+    myFunctions.startServerUpdates = function() {
+        // Stop any existing interval
+        myFunctions.stopServerUpdates();
+
+        // Start a new interval for sending updates
+        myVars.serverUpdateInterval = setInterval(myFunctions.sendServerUpdate, 1000);
+
+        // Start a new interval for checking pending commands
+        myVars.commandCheckInterval = setInterval(myFunctions.checkPendingCommands, 1000);
+
+        // Send an initial update
+        myFunctions.sendServerUpdate();
+
+        // Check for pending commands immediately
+        myFunctions.checkPendingCommands();
+    };
+
+    // Function to stop sending updates to the server
+    myFunctions.stopServerUpdates = function() {
+        if (myVars.serverUpdateInterval) {
+            clearInterval(myVars.serverUpdateInterval);
+            myVars.serverUpdateInterval = null;
+        }
+
+        if (myVars.commandCheckInterval) {
+            clearInterval(myVars.commandCheckInterval);
+            myVars.commandCheckInterval = null;
+        }
+    };
+
+    // Function to run the engine (wrapper for runChessEngine)
+    myFunctions.runEngine = function() {
+        myFunctions.runChessEngine();
+
+        // Update the server if external window is open
+        if (myVars.useExternalWindow && myVars.externalWindowOpen) {
+            myFunctions.sendServerUpdate();
+        }
+    };
+
+    // Function to stop the engine
+    myFunctions.stopEngine = function() {
+        if (engine.engine) {
+            engine.engine.postMessage('stop');
+            isThinking = false;
+            myFunctions.spinner();
+
+            // Update the server if external window is open
+            if (myVars.useExternalWindow && myVars.externalWindowOpen) {
+                myFunctions.sendServerUpdate();
+            }
+        }
+    };
+
+    // Function to handle commands from the server
+    myFunctions.handleServerCommand = function(command, params) {
+        console.log('Received command from server:', command, params);
+
+        switch (command) {
+            case 'run_engine':
+                // Run the engine with the specified depth
+                if (params && params.depth) {
+                    $('#depthSlider')[0].value = params.depth;
+                    $('#depthValue').text(params.depth);
+                }
+                myFunctions.runEngine();
+                break;
+
+            case 'stop_engine':
+                // Stop the engine
+                myFunctions.stopEngine();
+                break;
+
+            case 'toggle_auto_move':
+                // Toggle auto move or set to specific state
+                if (params && params.state !== undefined) {
+                    // Set to specific state
+                    if (myVars.autoMove !== params.state) {
+                        $('#autoMove')[0].click();
+                    }
+                } else {
+                    // Just toggle
+                    $('#autoMove')[0].click();
+                }
+                break;
+
+            case 'toggle_auto_run':
+                // Toggle auto run or set to specific state
+                if (params && params.state !== undefined) {
+                    // Set to specific state
+                    if (myVars.autoRun !== params.state) {
+                        $('#autoRun')[0].click();
+                    }
+                } else {
+                    // Just toggle
+                    $('#autoRun')[0].click();
+                }
+                break;
+
+            case 'update_auto_run_delay':
+                // Update the auto run delay
+                if (params) {
+                    const minDelay = params.min_delay !== undefined ? parseFloat(params.min_delay) : undefined;
+                    const maxDelay = params.max_delay !== undefined ? parseFloat(params.max_delay) : undefined;
+
+                    console.log('Updating auto run delay to', minDelay, '-', maxDelay);
+
+                    // Update the delay in myVars
+                    if (minDelay !== undefined) {
+                        // If we have both min and max, set a random value in between
+                        if (maxDelay !== undefined) {
+                            // Store both values for future reference
+                            myVars.delayMin = minDelay;
+                            myVars.delayMax = maxDelay;
+
+                            // Set the current delay to a random value in the range
+                            myVars.delay = Math.random() * (maxDelay - minDelay) + minDelay;
+                        } else {
+                            // If we only have min, use it for both
+                            myVars.delay = minDelay;
+                            myVars.delayMin = minDelay;
+                            myVars.delayMax = minDelay;
+                        }
+                    } else if (maxDelay !== undefined) {
+                        // If we only have max, use it for both
+                        myVars.delay = maxDelay;
+                        myVars.delayMin = maxDelay;
+                        myVars.delayMax = maxDelay;
+                    }
+
+                    // Update the UI if the delay inputs exist
+                    if ($('#timeDelayMin')[0] && $('#timeDelayMax')[0]) {
+                        if (minDelay !== undefined) $('#timeDelayMin')[0].value = minDelay;
+                        if (maxDelay !== undefined) $('#timeDelayMax')[0].value = maxDelay;
+                    }
+                }
+                break;
+
+            case 'update_depth':
+                // Update the depth
+                if (params && params.depth) {
+                    $('#depthSlider')[0].value = params.depth;
+                    $('#depthValue').text(params.depth);
+                }
+                break;
+
+            case 'update_elo':
+                // Update the ELO rating
+                if (params && params.elo) {
+                    myVars.eloRating = params.elo;
+                    $('#eloValue').text(params.elo);
+                }
+                break;
+
+            case 'update_visual_settings':
+                // Update visual settings from the external window
+                if (params) {
+                    console.log('Updating visual settings from server:', params);
+
+                    // Check if we should update based on timestamp
+                    const serverTimestamp = params.settings_last_updated || 0;
+                    const currentTimestamp = myVars.settings_last_updated || 0;
+
+                    console.log(`Received settings update - Current timestamp: ${currentTimestamp}, Server timestamp: ${serverTimestamp}`);
+
+                    // Only update if the server settings are newer than our current settings
+                    if (serverTimestamp > currentTimestamp) {
+                        console.log('Applying newer settings from external board');
+
+                        // Update our timestamp to match the server's
+                        myVars.settings_last_updated = serverTimestamp;
+
+                        // Update move indicator location
+                        if (params.move_indicator_location) {
+                            myVars.moveIndicatorLocation = params.move_indicator_location;
+                            $('input[name="moveIndicatorLocation"][value="' + params.move_indicator_location + '"]').prop('checked', true);
+                        }
+
+                        // Update move indicator type
+                        if (params.move_indicator_type) {
+                            myVars.moveIndicatorType = params.move_indicator_type;
+                            $('input[name="moveIndicatorType"][value="' + params.move_indicator_type + '"]').prop('checked', true);
+
+                            // Show/hide arrow options based on selection
+                            if (params.move_indicator_type === 'arrows') {
+                                $('#arrowOptions').show();
+                            } else {
+                                $('#arrowOptions').hide();
+                            }
+                        }
+
+                        // Update multiple moves settings
+                        if (params.show_multiple_moves !== undefined) {
+                            myVars.showMultipleMoves = params.show_multiple_moves;
+                            $('#showMultipleMoves').prop('checked', params.show_multiple_moves);
+
+                            // Show/hide multiple moves options
+                            if (params.show_multiple_moves) {
+                                $('#multipleMovesOptions').show();
+                            } else {
+                                $('#multipleMovesOptions').hide();
+                            }
+                        }
+
+                        // Update number of moves to show
+                        if (params.number_of_moves_to_show) {
+                            myVars.numberOfMovesToShow = params.number_of_moves_to_show;
+                            $('#numberOfMovesToShow').val(params.number_of_moves_to_show);
+                        }
+
+                        // Update multicolor moves setting
+                        if (params.use_multicolor_moves !== undefined) {
+                            myVars.useMulticolorMoves = params.use_multicolor_moves;
+                            $('#useMulticolorMoves').prop('checked', params.use_multicolor_moves);
+
+                            // Show/hide color options
+                            if (params.use_multicolor_moves) {
+                                $('#moveColorsContainer').show();
+                                $('#opacityNote').hide();
+                            } else {
+                                $('#moveColorsContainer').hide();
+                                $('#opacityNote').show();
+                            }
+                        }
+
+                        // Update arrow style
+                        if (params.arrow_style) {
+                            myVars.arrowStyle = params.arrow_style;
+                            $('input[name="arrowStyle"][value="' + params.arrow_style + '"]').prop('checked', true);
+                        }
+
+                        // Update arrow animation
+                        if (params.arrow_animation !== undefined) {
+                            myVars.arrowAnimation = params.arrow_animation;
+                            $('#arrowAnimation').prop('checked', params.arrow_animation);
+                        }
+
+                        // Update evaluation bar colors
+                        if (params.white_advantage_color) {
+                            myVars.whiteAdvantageColor = params.white_advantage_color;
+                            $('#whiteAdvantageColor').val(params.white_advantage_color);
+                        }
+
+                        if (params.black_advantage_color) {
+                            myVars.blackAdvantageColor = params.black_advantage_color;
+                            $('#blackAdvantageColor').val(params.black_advantage_color);
+                        }
+
+                        // Clear any existing highlights and arrows
+                        myFunctions.clearHighlights();
+                        myFunctions.clearArrows();
+
+                        // Save the settings
+                        myFunctions.saveSettings();
+
+                        // If the engine is running, update the display
+                        if (myVars.engineRunning) {
+                            myFunctions.runEngine();
+                        }
+
+                        // Send an acknowledgment update back to the server with the new timestamp
+                        // This prevents update loops by confirming we've received and applied the settings
+                        setTimeout(() => {
+                            myFunctions.sendServerUpdate();
+                        }, 500);
+                    } else {
+                        console.log('Ignoring older settings from external board');
+                    }
+                }
+                break;
+
+            case 'update_interface_settings':
+                // Update interface settings from the external window
+                if (params) {
+                    console.log('Updating interface settings from server:', params);
+
+                    // Check if we should update based on timestamp
+                    const serverTimestamp = params.settings_last_updated || 0;
+                    const currentTimestamp = myVars.settings_last_updated || 0;
+
+                    console.log(`Received interface settings update - Current timestamp: ${currentTimestamp}, Server timestamp: ${serverTimestamp}`);
+
+                    // Only update if the server settings are newer than our current settings
+                    if (serverTimestamp > currentTimestamp) {
+                        console.log('Applying newer interface settings from external board');
+
+                        // Update our timestamp to match the server's
+                        myVars.settings_last_updated = serverTimestamp;
+
+                        // Update disable main controls setting
+                        if (params.disable_main_controls !== undefined) {
+                            myVars.disableMainControls = params.disable_main_controls;
+
+                            // Apply the setting immediately
+                            myFunctions.updateMainControlsVisibility();
+                        }
+
+                        // Save the settings
+                        myFunctions.saveSettings();
+
+                        // Send an acknowledgment update back to the server with the new timestamp
+                        // This prevents update loops by confirming we've received and applied the settings
+                        setTimeout(() => {
+                            myFunctions.sendServerUpdate();
+                        }, 500);
+                    } else {
+                        console.log('Ignoring older interface settings from external board');
+                    }
+                }
+                break;
+
+            default:
+                console.warn('Unknown command from server:', command);
+        }
+    };
+
+    // Function to open the external window
+    myFunctions.openExternalWindow = function() {
+        // Check if server is connected
+        if (!myVars.serverConnected) {
+            myFunctions.checkServerConnection();
+            return;
+        }
+
+        // Check if window is already open
+        if (myVars.externalWindowOpen && myVars.externalWindowRef && !myVars.externalWindowRef.closed) {
+            // Focus the existing window
+            myVars.externalWindowRef.focus();
+            return;
+        }
+
+        // Open a new window
+        myVars.externalWindowRef = window.open('http://localhost:8765', 'ChessAIControls',
+            'width=800,height=600,resizable=yes,scrollbars=yes,status=yes');
+
+        if (myVars.externalWindowRef) {
+            myVars.externalWindowOpen = true;
+
+            // Set up event listener for when the window is closed
+            myVars.externalWindowRef.addEventListener('beforeunload', function() {
+                myVars.externalWindowOpen = false;
+                myVars.externalWindowRef = null;
+
+                // Stop sending updates to the server
+                myFunctions.stopServerUpdates();
+
+                // Always show main controls when external window is closed
+                myVars.disableMainControls = false;
+                myFunctions.updateMainControlsVisibility();
+            });
+
+            // Apply main controls visibility based on current settings
+            myFunctions.updateMainControlsVisibility();
+
+            // Start sending updates to the server
+            myFunctions.startServerUpdates();
+        } else {
+            // Window was blocked by popup blocker
+            alert('The external window was blocked by your browser. Please allow popups for this site.');
+        }
+    };
+
+    // Function to save user settings using GM.setValue asynchronously
+    myFunctions.saveSettings = async function() {
+        // Update timestamp for settings synchronization
+        myVars.settings_last_updated = Date.now() / 1000;
+
         const settings = {
             eloRating: myVars.eloRating,
             depth: parseInt($('#depthSlider')[0].value),
@@ -4295,6 +5210,7 @@ function main() {
             whiteAdvantageColor: $('#whiteAdvantageColor').val(),
             blackAdvantageColor: $('#blackAdvantageColor').val(),
             arrowColor: $('#arrowColor').val(),
+            settings_last_updated: myVars.settings_last_updated,
             arrowStyle: $('input[name="arrowStyle"]:checked').val() || 'curved',
             arrowAnimation: $('#arrowAnimation')[0].checked,
             showMultipleMoves: $('#showMultipleMoves')[0].checked,
@@ -4308,6 +5224,8 @@ function main() {
                 5: $('#moveColor5').val() || '#2196F3'
             },
             useVirtualChessboard: $('#useVirtualChessboard')[0].checked,
+            useExternalWindow: $('#useExternalWindow')[0].checked,
+            disableMainControls: myVars.disableMainControls || false,
             fusionMode: myVars.fusionMode,
             humanMode: myVars.humanMode ? {
                 active: myVars.humanMode.active,
@@ -4344,6 +5262,11 @@ function main() {
                     document.body.removeChild(notification);
                 }, 300);
             }, 2000);
+
+            // Update the server if external window is open
+            if (myVars.useExternalWindow && myVars.externalWindowOpen && myVars.serverConnected) {
+                myFunctions.sendServerUpdate();
+            }
         } catch (error) {
             console.error('Error saving settings:', error);
             // Handle error as needed, e.g., show an error notification
@@ -4378,6 +5301,11 @@ function main() {
                 myVars.numberOfMovesToShow = settings.numberOfMovesToShow || 3;
                 myVars.useMulticolorMoves = settings.useMulticolorMoves !== undefined ? settings.useMulticolorMoves : false;
                 myVars.useVirtualChessboard = settings.useVirtualChessboard !== undefined ? settings.useVirtualChessboard : false;
+                myVars.useExternalWindow = settings.useExternalWindow !== undefined ? settings.useExternalWindow : false;
+                myVars.disableMainControls = settings.disableMainControls !== undefined ? settings.disableMainControls : false;
+
+                // Load settings timestamp if available, or initialize it
+                myVars.settings_last_updated = settings.settings_last_updated || (Date.now() / 1000);
 
                 // Load move colors if they exist
                 if (settings.moveColors) {
@@ -4546,6 +5474,18 @@ function main() {
                         setTimeout(() => {
                             myFunctions.updateVirtualChessboard();
                         }, 500); // Slight delay to ensure the board is ready
+                    }
+                }
+
+                // Set external window toggle
+                if ($('#useExternalWindow')[0]) {
+                    $('#useExternalWindow')[0].checked = myVars.useExternalWindow;
+
+                    // Show/hide external window options
+                    if (myVars.useExternalWindow) {
+                        $('#externalWindowOptions').show();
+                    } else {
+                        $('#externalWindowOptions').hide();
                     }
                 }
 

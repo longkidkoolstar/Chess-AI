@@ -4,6 +4,8 @@ A powerful browser extension that enhances Chess.com with integrated Stockfish a
 
 ![Chess AI Demo](demo.gif) <!-- Please replace with an actual demo GIF -->
 
+> **New Feature**: Chess AI now supports an external window interface that allows you to control the engine from a separate window or tab, providing a cleaner Chess.com experience and more advanced visualization options!
+
 ## Features ✨
 
 - **Advanced Move Analysis**: Integrated Stockfish engine evaluates positions in real-time ⚡️
@@ -15,6 +17,8 @@ A powerful browser extension that enhances Chess.com with integrated Stockfish a
 - **Fusion Mode**: Automatically matches your opponent's rating for balanced play ⚖️
 - **Auto Run & Auto Move**: Optionally automates analysis and move execution 🤖
 - **Full Keyboard Control**: Quick access to all depths with keyboard shortcuts ⌨️
+- **External Window Interface**: Open the Chess AI controls in a separate window or tab 🪟
+- **Multiple Move Display**: View top 3-5 moves with opacity indicating move strength 🔢
 - **Comprehensive Settings**: Fully customizable interface and behavior ⚙️
 
 
@@ -51,9 +55,14 @@ The settings panel provides access to all features and is organized into tabs:
 
 - **Engine**: Set depth and ELO rating
 - **Actions**: Run/stop engine, save settings
-- **Visual**: Customize evaluation bar colors and move indicators
+- **Visual**: Customize evaluation bar colors, move indicators, and external window options
 - **Play Style**: Configure Human Mode and Fusion Mode
 - **Auto**: Set up automatic analysis and moves
+
+The external window interface has its own settings tabs:
+- **Engine**: Control depth and run/stop the engine
+- **Visual**: Customize move indicators and evaluation bar
+- **Interface**: Configure auto-run/move settings and main controls visibility
 
 #### Human Mode
 Makes the engine play with human-like characteristics:
@@ -65,6 +74,31 @@ Makes the engine play with human-like characteristics:
 
 #### Fusion Mode
 When enabled, automatically adjusts engine strength to match your opponent's rating, creating a fair and balanced experience.
+
+
+#### External Window Interface
+The external window feature allows you to open the Chess AI controls in a separate window or tab:
+
+- **Setup**:
+  1. Enable "Open GUI in external window" in the Visual Settings tab
+  2. Download the Python server file using the provided link
+  3. Run the server on your computer with `python chess_ai_server.py`
+  4. Click "Start Local Server" to connect
+  5. Click "Open External Window" to launch the interface
+
+- **Features**:
+  - Virtual chessboard showing the current position
+  - Customizable move indicators (highlights or arrows)
+  - Option to show move suggestions on external board only
+  - Multiple move display with color-coding for move strength
+  - Auto run and auto move controls with adjustable delay
+  - Ability to disable main controls when using external window
+
+- **Benefits**:
+  - Keeps your Chess.com interface clean
+  - Provides more detailed analysis view
+  - Reduces the risk of detection by chess.com
+  - Allows for more comprehensive visualization options
 
 
 ## Keyboard Shortcuts ⌨️
@@ -86,6 +120,11 @@ When enabled, automatically adjusts engine strength to match your opponent's rat
 - Enable persistent highlights to keep move suggestions visible
 - Use Human Mode during practice to get more realistic opponent behavior
 - Save your preferred settings for future sessions
+- Use the external window interface for a cleaner Chess.com experience
+- Set move indicators to "external" to hide them on the main board
+- Enable "Show multiple moves" to see alternative options with their relative strength
+- Use multicolor mode to easily distinguish between move suggestions
+- Try different arrow styles (curved or straight) based on your preference
 
 
 ## Disclaimer ⚠️
