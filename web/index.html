@@ -402,8 +402,19 @@
 
             // Evaluation bar colors
             white_advantage_color: "#4CAF50",
-            black_advantage_color: "#F44336"
+            black_advantage_color: "#F44336",
+
+            // Settings synchronization metadata
+            settings_last_updated: 0,
+            settings_update_source: "external_board",
+            visual_settings: {
+                timestamp: 0,
+                source: "external_board"
+            }
         };
+
+        // Flag to prevent settings update loops
+        let isUpdatingSettings = false;
         let connected = false;
         let updateInterval = null;
 
@@ -650,37 +661,6 @@
             // Show move indicators on the external board if configured
             if ((chessState.move_indicator_location === 'external' || chessState.move_indicator_location === 'both')) {
 
-                // Show best move if available
-                if (chessState.best_move && chessState.best_move.length >= 4) {
-                    console.log('Showing best move on external board:', chessState.best_move);
-
-                    const fromSquare = chessState.best_move.substring(0, 2);
-                    const toSquare = chessState.best_move.substring(2, 4);
-
-                    // Get color for best move
-                    let bestMoveColor = chessState.arrow_color;
-                    if (chessState.use_multicolor_moves && chessState.move_colors && chessState.move_colors['1']) {
-                        bestMoveColor = chessState.move_colors['1'];
-                    }
-
-                    // Show the best move based on the move indicator type
-                    if (chessState.move_indicator_type === 'arrows') {
-                        // Draw an arrow for the best move
-                        drawArrow(
-                            fromSquare,
-                            toSquare,
-                            bestMoveColor,
-                            chessState.arrow_opacity,
-                            chessState.arrow_style,
-                            chessState.arrow_animation
-                        );
-                    } else {
-                        // Use highlights for the best move
-                        addHighlight(fromSquare, bestMoveColor);
-                        addHighlight(toSquare, bestMoveColor);
-                    }
-                }
-
                 // Show multiple moves if enabled
                 if (chessState.show_multiple_moves && chessState.top_moves && chessState.top_moves.length > 1) {
                     console.log('Showing multiple moves on external board');
@@ -695,8 +675,9 @@
                     );
                     console.log('Moves to show:', movesToShow);
 
-                    // Loop through top moves (skip the best move as it's already shown)
-                    for (let i = 1; i < movesToShow; i++) {
+                    // Loop through all moves in reverse order (so best move is drawn last and appears on top)
+                    // Start from lower ranked moves (higher index) and end with the best move (index 0)
+                    for (let i = movesToShow - 1; i >= 0; i--) {
                         console.log('Processing move index:', i);
                         // Check if the move exists at this index
                         if (!chessState.top_moves[i]) {
@@ -743,6 +724,36 @@
                                 addHighlight(toSquare, moveColor);
                             }
                         }
+                    }
+                }
+                // If multiple moves are not enabled, just show the best move
+                else if (chessState.best_move && chessState.best_move.length >= 4) {
+                    console.log('Showing only best move on external board:', chessState.best_move);
+
+                    const fromSquare = chessState.best_move.substring(0, 2);
+                    const toSquare = chessState.best_move.substring(2, 4);
+
+                    // Get color for best move
+                    let bestMoveColor = chessState.arrow_color;
+                    if (chessState.use_multicolor_moves && chessState.move_colors && chessState.move_colors['1']) {
+                        bestMoveColor = chessState.move_colors['1'];
+                    }
+
+                    // Show the best move based on the move indicator type
+                    if (chessState.move_indicator_type === 'arrows') {
+                        // Draw an arrow for the best move
+                        drawArrow(
+                            fromSquare,
+                            toSquare,
+                            bestMoveColor,
+                            chessState.arrow_opacity,
+                            chessState.arrow_style,
+                            chessState.arrow_animation
+                        );
+                    } else {
+                        // Use highlights for the best move
+                        addHighlight(fromSquare, bestMoveColor);
+                        addHighlight(toSquare, bestMoveColor);
                     }
                 }
             }
@@ -862,20 +873,25 @@
         function sendCommand(command, params = {}) {
             if (!connected) {
                 console.error('Not connected to userscript');
-                return;
+                return Promise.reject(new Error('Not connected to userscript'));
             }
 
-            fetch('/api/command', {
+            return fetch('/api/command', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
                     command: command,
-                    ...params
+                    params: params
                 })
             })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`Server responded with status: ${response.status}`);
+                }
+                return response.json();
+            })
             .then(data => {
                 console.log('Command response:', data);
 
@@ -889,9 +905,12 @@
                     document.getElementById('stop-engine').disabled = true;
                     document.getElementById('status-text').textContent = 'Engine stopped';
                 }
+
+                return data;
             })
             .catch(error => {
                 console.error('Error sending command:', error);
+                throw error;
             });
         }
 
@@ -918,7 +937,94 @@
                     const oldFen = chessState.fen;
                     const oldBestMove = chessState.best_move;
 
-                    chessState = data;
+                    // Check if we need to handle visual settings synchronization
+                    const incomingSettingsTimestamp = data.settings_last_updated || 0;
+                    const currentSettingsTimestamp = chessState.settings_last_updated || 0;
+                    const incomingSource = data.settings_update_source || '';
+
+                    console.log(`Received state update - Current timestamp: ${currentSettingsTimestamp}, Incoming timestamp: ${incomingSettingsTimestamp}, Source: ${incomingSource}`);
+
+                    // Define visual settings keys
+                    const visualSettingsKeys = [
+                        "move_indicator_location", "move_indicator_type", "show_multiple_moves",
+                        "number_of_moves_to_show", "use_multicolor_moves", "arrow_style",
+                        "arrow_animation", "white_advantage_color", "black_advantage_color",
+                        "arrow_opacity", "persistent_highlights"
+                    ];
+
+                    // If we're currently updating settings from the external board, handle userscript updates carefully
+                    if (isUpdatingSettings && incomingSource === 'userscript') {
+                        console.log('External board is currently updating settings, handling userscript update carefully');
+
+                        // Check if the userscript update is newer than our current settings
+                        if (incomingSettingsTimestamp > currentSettingsTimestamp) {
+                            console.log('Userscript settings are newer, merging with current changes');
+
+                            // Save our current visual settings
+                            const currentVisualSettings = {};
+                            for (const key of visualSettingsKeys) {
+                                currentVisualSettings[key] = chessState[key];
+                            }
+
+                            // Update non-visual settings from userscript
+                            for (const key in data) {
+                                if (!visualSettingsKeys.includes(key)) {
+                                    chessState[key] = data[key];
+                                }
+                            }
+
+                            // Restore our current visual settings
+                            for (const key in currentVisualSettings) {
+                                chessState[key] = currentVisualSettings[key];
+                            }
+
+                            // Keep our timestamp and source
+                            chessState.settings_last_updated = currentSettingsTimestamp;
+                            chessState.settings_update_source = 'external_board';
+                        } else {
+                            console.log('Userscript settings are older, only updating non-visual settings');
+
+                            // Only update non-visual settings
+                            for (const key in data) {
+                                if (!visualSettingsKeys.includes(key)) {
+                                    chessState[key] = data[key];
+                                }
+                            }
+                        }
+                    }
+                    // If the incoming settings are from the userscript and are newer than our current settings
+                    else if (incomingSource === 'userscript' && incomingSettingsTimestamp > currentSettingsTimestamp) {
+                        console.log('Applying newer settings from userscript');
+
+                        // Update all settings
+                        for (const key in data) {
+                            chessState[key] = data[key];
+                        }
+
+                        // Update UI controls to reflect the new settings
+                        setTimeout(() => {
+                            updateUIControls();
+                        }, 100);
+                    }
+                    // Otherwise, update everything except visual settings if we're in the middle of a change
+                    else {
+                        console.log('Updating state with standard rules');
+
+                        // If we're not updating settings, update everything
+                        if (!isUpdatingSettings) {
+                            for (const key in data) {
+                                chessState[key] = data[key];
+                            }
+                        }
+                        // If we are updating settings, only update non-visual settings
+                        else {
+                            for (const key in data) {
+                                if (!visualSettingsKeys.includes(key)) {
+                                    chessState[key] = data[key];
+                                }
+                            }
+                        }
+                    }
 
                     // Update the UI
                     // Always update the board to show move indicators, even if FEN hasn't changed
@@ -947,49 +1053,52 @@
                         document.getElementById('status-text').textContent = 'Connected to Chess AI userscript';
                     }
 
-                    // Update engine settings
-                    document.getElementById('depth').value = chessState.depth;
-                    document.getElementById('depth-value').textContent = chessState.depth;
-                    document.getElementById('elo').value = chessState.elo;
-                    document.getElementById('elo-value').textContent = chessState.elo;
+                    // Only update UI controls if we're not currently updating settings
+                    if (!isUpdatingSettings) {
+                        // Update engine settings
+                        document.getElementById('depth').value = chessState.depth;
+                        document.getElementById('depth-value').textContent = chessState.depth;
+                        document.getElementById('elo').value = chessState.elo;
+                        document.getElementById('elo-value').textContent = chessState.elo;
 
-                    // Update visual settings
-                    document.getElementById('move-indicator-location').value = chessState.move_indicator_location;
-                    document.getElementById('move-indicator-type').value = chessState.move_indicator_type;
-                    document.getElementById('show-multiple-moves').checked = chessState.show_multiple_moves;
+                        // Update visual settings
+                        document.getElementById('move-indicator-location').value = chessState.move_indicator_location;
+                        document.getElementById('move-indicator-type').value = chessState.move_indicator_type;
+                        document.getElementById('show-multiple-moves').checked = chessState.show_multiple_moves;
 
-                    // Show/hide multiple moves options
-                    if (chessState.show_multiple_moves) {
-                        document.getElementById('multiple-moves-options').style.display = 'flex';
-                        document.getElementById('multiple-moves-color-option').style.display = 'flex';
-                    } else {
-                        document.getElementById('multiple-moves-options').style.display = 'none';
-                        document.getElementById('multiple-moves-color-option').style.display = 'none';
+                        // Show/hide multiple moves options
+                        if (chessState.show_multiple_moves) {
+                            document.getElementById('multiple-moves-options').style.display = 'flex';
+                            document.getElementById('multiple-moves-color-option').style.display = 'flex';
+                        } else {
+                            document.getElementById('multiple-moves-options').style.display = 'none';
+                            document.getElementById('multiple-moves-color-option').style.display = 'none';
+                        }
+
+                        // Update number of moves slider
+                        document.getElementById('number-of-moves').value = chessState.number_of_moves_to_show;
+                        document.getElementById('number-of-moves-value').textContent = chessState.number_of_moves_to_show;
+
+                        // Update multicolor moves checkbox
+                        document.getElementById('use-multicolor-moves').checked = chessState.use_multicolor_moves;
+
+                        // Show/hide arrow options based on move indicator type
+                        if (chessState.move_indicator_type === 'arrows') {
+                            document.getElementById('arrow-options').style.display = 'flex';
+                            document.getElementById('arrow-animation-option').style.display = 'flex';
+                        } else {
+                            document.getElementById('arrow-options').style.display = 'none';
+                            document.getElementById('arrow-animation-option').style.display = 'none';
+                        }
+
+                        // Update arrow style and animation
+                        document.getElementById('arrow-style').value = chessState.arrow_style;
+                        document.getElementById('arrow-animation').checked = chessState.arrow_animation;
+
+                        // Update evaluation bar colors
+                        document.getElementById('white-advantage-color').value = chessState.white_advantage_color;
+                        document.getElementById('black-advantage-color').value = chessState.black_advantage_color;
                     }
-
-                    // Update number of moves slider
-                    document.getElementById('number-of-moves').value = chessState.number_of_moves_to_show;
-                    document.getElementById('number-of-moves-value').textContent = chessState.number_of_moves_to_show;
-
-                    // Update multicolor moves checkbox
-                    document.getElementById('use-multicolor-moves').checked = chessState.use_multicolor_moves;
-
-                    // Show/hide arrow options based on move indicator type
-                    if (chessState.move_indicator_type === 'arrows') {
-                        document.getElementById('arrow-options').style.display = 'flex';
-                        document.getElementById('arrow-animation-option').style.display = 'flex';
-                    } else {
-                        document.getElementById('arrow-options').style.display = 'none';
-                        document.getElementById('arrow-animation-option').style.display = 'none';
-                    }
-
-                    // Update arrow style and animation
-                    document.getElementById('arrow-style').value = chessState.arrow_style;
-                    document.getElementById('arrow-animation').checked = chessState.arrow_animation;
-
-                    // Update evaluation bar colors
-                    document.getElementById('white-advantage-color').value = chessState.white_advantage_color;
-                    document.getElementById('black-advantage-color').value = chessState.black_advantage_color;
                 })
                 .catch(error => {
                     console.error('Error fetching state:', error);
@@ -1032,6 +1141,61 @@
                     console.error('Error connecting to server:', error);
                     document.getElementById('status-text').textContent = 'Error connecting to server';
                 });
+        }
+
+        // Function to update UI controls based on current state
+        function updateUIControls() {
+            // Only update if we're not currently in the middle of a settings change
+            if (isUpdatingSettings) {
+                console.log('Skipping UI update while settings are being updated');
+                return;
+            }
+
+            console.log('Updating UI controls to match current state');
+
+            // Update engine settings
+            document.getElementById('depth').value = chessState.depth;
+            document.getElementById('depth-value').textContent = chessState.depth;
+            document.getElementById('elo').value = chessState.elo;
+            document.getElementById('elo-value').textContent = chessState.elo;
+
+            // Update visual settings
+            document.getElementById('move-indicator-location').value = chessState.move_indicator_location;
+            document.getElementById('move-indicator-type').value = chessState.move_indicator_type;
+            document.getElementById('show-multiple-moves').checked = chessState.show_multiple_moves;
+
+            // Show/hide multiple moves options
+            if (chessState.show_multiple_moves) {
+                document.getElementById('multiple-moves-options').style.display = 'flex';
+                document.getElementById('multiple-moves-color-option').style.display = 'flex';
+            } else {
+                document.getElementById('multiple-moves-options').style.display = 'none';
+                document.getElementById('multiple-moves-color-option').style.display = 'none';
+            }
+
+            // Update number of moves slider
+            document.getElementById('number-of-moves').value = chessState.number_of_moves_to_show;
+            document.getElementById('number-of-moves-value').textContent = chessState.number_of_moves_to_show;
+
+            // Update multicolor moves checkbox
+            document.getElementById('use-multicolor-moves').checked = chessState.use_multicolor_moves;
+
+            // Show/hide arrow options based on move indicator type
+            if (chessState.move_indicator_type === 'arrows') {
+                document.getElementById('arrow-options').style.display = 'flex';
+                document.getElementById('arrow-animation-option').style.display = 'flex';
+            } else {
+                document.getElementById('arrow-options').style.display = 'none';
+                document.getElementById('arrow-animation-option').style.display = 'none';
+            }
+
+            // Update arrow style and animation
+            document.getElementById('arrow-style').value = chessState.arrow_style;
+            document.getElementById('arrow-animation').checked = chessState.arrow_animation;
+
+            // Update evaluation bar colors
+            document.getElementById('white-advantage-color').value = chessState.white_advantage_color;
+            document.getElementById('black-advantage-color').value = chessState.black_advantage_color;
         }
 
         // Initialize the page
@@ -1093,12 +1257,26 @@
 
             // Add event listeners for visual settings
             document.getElementById('move-indicator-location').addEventListener('change', function() {
+                // Only process if we're not already updating settings
+                if (isUpdatingSettings) {
+                    console.log('Ignoring move-indicator-location change while settings are being updated');
+                    return;
+                }
+
+                console.log('External board: move-indicator-location changed to', this.value);
                 chessState.move_indicator_location = this.value;
                 updateChessBoard(chessState.fen);
                 sendVisualSettingsToUserscript();
             });
 
             document.getElementById('move-indicator-type').addEventListener('change', function() {
+                // Only process if we're not already updating settings
+                if (isUpdatingSettings) {
+                    console.log('Ignoring move-indicator-type change while settings are being updated');
+                    return;
+                }
+
+                console.log('External board: move-indicator-type changed to', this.value);
                 chessState.move_indicator_type = this.value;
 
                 // Show/hide arrow options based on selection
@@ -1115,6 +1293,13 @@
             });
 
             document.getElementById('show-multiple-moves').addEventListener('change', function() {
+                // Only process if we're not already updating settings
+                if (isUpdatingSettings) {
+                    console.log('Ignoring show-multiple-moves change while settings are being updated');
+                    return;
+                }
+
+                console.log('External board: show-multiple-moves changed to', this.checked);
                 chessState.show_multiple_moves = this.checked;
 
                 // Show/hide multiple moves options
@@ -1131,7 +1316,14 @@
             });
 
             document.getElementById('number-of-moves').addEventListener('input', function() {
+                // Only process if we're not already updating settings
+                if (isUpdatingSettings) {
+                    console.log('Ignoring number-of-moves change while settings are being updated');
+                    return;
+                }
+
                 const numMoves = parseInt(this.value);
+                console.log('External board: number-of-moves changed to', numMoves);
                 document.getElementById('number-of-moves-value').textContent = numMoves;
                 chessState.number_of_moves_to_show = numMoves;
                 updateChessBoard(chessState.fen);
@@ -1139,30 +1331,65 @@
             });
 
             document.getElementById('use-multicolor-moves').addEventListener('change', function() {
+                // Only process if we're not already updating settings
+                if (isUpdatingSettings) {
+                    console.log('Ignoring use-multicolor-moves change while settings are being updated');
+                    return;
+                }
+
+                console.log('External board: use-multicolor-moves changed to', this.checked);
                 chessState.use_multicolor_moves = this.checked;
                 updateChessBoard(chessState.fen);
                 sendVisualSettingsToUserscript();
             });
 
             document.getElementById('arrow-style').addEventListener('change', function() {
+                // Only process if we're not already updating settings
+                if (isUpdatingSettings) {
+                    console.log('Ignoring arrow-style change while settings are being updated');
+                    return;
+                }
+
+                console.log('External board: arrow-style changed to', this.value);
                 chessState.arrow_style = this.value;
                 updateChessBoard(chessState.fen);
                 sendVisualSettingsToUserscript();
             });
 
             document.getElementById('arrow-animation').addEventListener('change', function() {
+                // Only process if we're not already updating settings
+                if (isUpdatingSettings) {
+                    console.log('Ignoring arrow-animation change while settings are being updated');
+                    return;
+                }
+
+                console.log('External board: arrow-animation changed to', this.checked);
                 chessState.arrow_animation = this.checked;
                 updateChessBoard(chessState.fen);
                 sendVisualSettingsToUserscript();
             });
 
             document.getElementById('white-advantage-color').addEventListener('change', function() {
+                // Only process if we're not already updating settings
+                if (isUpdatingSettings) {
+                    console.log('Ignoring white-advantage-color change while settings are being updated');
+                    return;
+                }
+
+                console.log('External board: white-advantage-color changed to', this.value);
                 chessState.white_advantage_color = this.value;
                 updateEvaluationBar(chessState.evaluation);
                 sendVisualSettingsToUserscript();
             });
 
             document.getElementById('black-advantage-color').addEventListener('change', function() {
+                // Only process if we're not already updating settings
+                if (isUpdatingSettings) {
+                    console.log('Ignoring black-advantage-color change while settings are being updated');
+                    return;
+                }
+
+                console.log('External board: black-advantage-color changed to', this.value);
                 chessState.black_advantage_color = this.value;
                 updateEvaluationBar(chessState.evaluation);
                 sendVisualSettingsToUserscript();
@@ -1170,6 +1397,26 @@
 
             // Function to send visual settings to the userscript
             function sendVisualSettingsToUserscript() {
+                // Set the updating flag to prevent update loops
+                isUpdatingSettings = true;
+                console.log('Sending visual settings from external board to userscript');
+
+                // Update the timestamp for this settings change
+                const currentTime = Date.now() / 1000; // Convert to seconds to match Python's time.time()
+
+                // Update our local state with the new timestamp and source
+                chessState.settings_last_updated = currentTime;
+                chessState.settings_update_source = 'external_board';
+                chessState.visual_settings = {
+                    timestamp: currentTime,
+                    source: 'external_board'
+                };
+
+                // Create a unique transaction ID for this update
+                const transactionId = `ext_${Math.floor(Math.random() * 1000000)}`;
+                chessState.settings_transaction_id = transactionId;
+
+                // Send the command with the updated settings
                 sendCommand('update_visual_settings', {
                     move_indicator_location: chessState.move_indicator_location,
                     move_indicator_type: chessState.move_indicator_type,
@@ -1179,7 +1426,61 @@
                     arrow_style: chessState.arrow_style,
                     arrow_animation: chessState.arrow_animation,
                     white_advantage_color: chessState.white_advantage_color,
-                    black_advantage_color: chessState.black_advantage_color
+                    black_advantage_color: chessState.black_advantage_color,
+                    arrow_opacity: chessState.arrow_opacity,
+                    persistent_highlights: chessState.persistent_highlights,
+                    // Include synchronization metadata
+                    settings_last_updated: currentTime,
+                    settings_update_source: 'external_board',
+                    settings_transaction_id: transactionId
+                }).then(response => {
+                    console.log('Visual settings sent to userscript:', response);
+
+                    // Wait for acknowledgment from the userscript
+                    let checkCount = 0;
+                    const maxChecks = 10;
+                    const checkInterval = 200; // ms
+
+                    function checkForAcknowledgment() {
+                        fetch('/api/state')
+                            .then(response => response.json())
+                            .then(data => {
+                                // Check if the userscript has acknowledged our update
+                                if (data.settings_transaction_id === transactionId &&
+                                    data.settings_update_source === 'userscript' &&
+                                    data.settings_acknowledged === true) {
+
+                                    console.log('Userscript acknowledged our settings update');
+                                    isUpdatingSettings = false;
+                                    console.log('Settings update complete, resuming normal operation');
+                                } else if (checkCount < maxChecks) {
+                                    // Try again
+                                    checkCount++;
+                                    setTimeout(checkForAcknowledgment, checkInterval);
+                                } else {
+                                    // Give up after max checks
+                                    console.log('No acknowledgment received from userscript, resuming normal operation');
+                                    isUpdatingSettings = false;
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Error checking for acknowledgment:', error);
+                                if (checkCount < maxChecks) {
+                                    // Try again
+                                    checkCount++;
+                                    setTimeout(checkForAcknowledgment, checkInterval);
+                                } else {
+                                    // Give up after max checks
+                                    isUpdatingSettings = false;
+                                }
+                            });
+                    }
+
+                    // Start checking for acknowledgment
+                    setTimeout(checkForAcknowledgment, 500);
+                }).catch(error => {
+                    console.error('Error sending visual settings:', error);
+                    isUpdatingSettings = false;
                 });
             }
         };
