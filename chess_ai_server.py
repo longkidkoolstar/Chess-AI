@@ -40,8 +40,11 @@ chess_state = {
     # Automation settings
     "auto_move": False,
     "auto_run": False,
-    "auto_run_delay_min": 0.1,  # Minimum delay in seconds
+    "auto_run_delay_min": 0.001,  # Minimum delay in seconds
     "auto_run_delay_max": 1.0,  # Maximum delay in seconds
+
+    # External window settings
+    "disable_main_controls": False,  # Option to disable main controls when connected to external window
 
     # Settings synchronization metadata
     "settings_last_updated": time.time(),
@@ -338,14 +341,14 @@ html_content = """<!DOCTYPE html>
                         <!-- Min Delay -->
                         <div style="display: flex; align-items: center; margin-bottom: 10px;">
                             <label for="auto-run-delay-min" style="width: 80px;">Minimum:</label>
-                            <input type="number" id="auto-run-delay-min" min="0.1" max="3.0" step="0.1" value="0.1" style="width: 80px; padding: 5px; border: 1px solid #ccc; border-radius: 4px;">
+                            <input type="number" id="auto-run-delay-min" min="0.001" max="10.0" step="0.001" value="0.1" style="width: 80px; padding: 5px; border: 1px solid #ccc; border-radius: 4px;">
                             <span style="margin-left: 5px;">seconds</span>
                         </div>
 
                         <!-- Max Delay -->
                         <div style="display: flex; align-items: center; margin-bottom: 5px;">
                             <label for="auto-run-delay-max" style="width: 80px;">Maximum:</label>
-                            <input type="number" id="auto-run-delay-max" min="0.1" max="3.0" step="0.1" value="1.0" style="width: 80px; padding: 5px; border: 1px solid #ccc; border-radius: 4px;">
+                            <input type="number" id="auto-run-delay-max" min="0.001" max="10.0" step="0.001" value="1.0" style="width: 80px; padding: 5px; border: 1px solid #ccc; border-radius: 4px;">
                             <span style="margin-left: 5px;">seconds</span>
                         </div>
 
@@ -424,6 +427,7 @@ html_content = """<!DOCTYPE html>
                 <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
                     <button id="engine-tab" class="settings-tab active" data-tab="engine-settings">Engine</button>
                     <button id="visual-tab" class="settings-tab" data-tab="visual-settings">Visual</button>
+                    <button id="interface-tab" class="settings-tab" data-tab="interface-settings">Interface</button>
                 </div>
 
                 <!-- Engine Settings Tab -->
@@ -496,6 +500,22 @@ html_content = """<!DOCTYPE html>
                     <div class="setting-row">
                         <label for="black-advantage-color">Black Advantage Color:</label>
                         <input type="color" id="black-advantage-color" value="#F44336" style="margin-left: 10px;">
+                    </div>
+                </div>
+
+                <!-- Interface Settings Tab -->
+                <div id="interface-settings" class="settings-content" style="display: none;">
+                    <div class="setting-row" style="margin-bottom: 15px; border-left: 3px solid #9C27B0; padding-left: 12px;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px;">
+                            <label for="disable-main-controls" style="font-weight: bold; color: #9C27B0;">Disable Main Controls:</label>
+                            <label class="switch">
+                                <input type="checkbox" id="disable-main-controls">
+                                <span class="slider round"></span>
+                            </label>
+                        </div>
+                        <div style="font-size: 12px; color: #666; margin-top: 5px;">
+                            When enabled, the main Chess AI controls on chess.com will be hidden while connected to this external window
+                        </div>
                     </div>
                 </div>
             </div>
@@ -578,8 +598,11 @@ html_content = """<!DOCTYPE html>
             // Automation settings
             auto_move: false,
             auto_run: false,
-            auto_run_delay_min: 0.1,
+            auto_run_delay_min: 0.001,
             auto_run_delay_max: 1.0,
+
+            // External window settings
+            disable_main_controls: false,
 
             // Settings synchronization metadata
             settings_last_updated: 0,
@@ -1194,8 +1217,8 @@ html_content = """<!DOCTYPE html>
                         const maxDelayInput = document.getElementById('auto-run-delay-max');
                         const delayContainer = document.getElementById('auto-run-delay-container');
 
-                        minDelayInput.value = chessState.auto_run_delay_min.toFixed(1);
-                        maxDelayInput.value = chessState.auto_run_delay_max.toFixed(1);
+                        minDelayInput.value = chessState.auto_run_delay_min.toFixed(3);
+                        maxDelayInput.value = chessState.auto_run_delay_max.toFixed(3);
                         delayContainer.style.display = chessState.auto_run ? 'block' : 'none';
 
                         // Update visual settings
@@ -1336,18 +1359,21 @@ html_content = """<!DOCTYPE html>
                 let minDelay = parseFloat(this.value);
 
                 // Validate input
-                if (isNaN(minDelay) || minDelay < 0.1) {
-                    minDelay = 0.1;
-                    this.value = minDelay;
-                } else if (minDelay > 3.0) {
-                    minDelay = 3.0;
-                    this.value = minDelay;
+                if (isNaN(minDelay) || minDelay < 0.001) {
+                    minDelay = 0.001;
+                    this.value = minDelay.toFixed(3);
+                } else if (minDelay > 10.0) {
+                    minDelay = 10.0;
+                    this.value = minDelay.toFixed(3);
+                } else {
+                    // Preserve the user's input with proper precision
+                    this.value = parseFloat(this.value).toString();
                 }
 
                 // Ensure min doesn't exceed max
                 const maxDelay = parseFloat(document.getElementById('auto-run-delay-max').value);
                 if (minDelay > maxDelay) {
-                    document.getElementById('auto-run-delay-max').value = minDelay;
+                    document.getElementById('auto-run-delay-max').value = minDelay.toString();
                 }
 
                 sendCommand('update_auto_run_delay', {
@@ -1360,18 +1386,21 @@ html_content = """<!DOCTYPE html>
                 let maxDelay = parseFloat(this.value);
 
                 // Validate input
-                if (isNaN(maxDelay) || maxDelay < 0.1) {
-                    maxDelay = 0.1;
-                    this.value = maxDelay;
-                } else if (maxDelay > 3.0) {
-                    maxDelay = 3.0;
-                    this.value = maxDelay;
+                if (isNaN(maxDelay) || maxDelay < 0.001) {
+                    maxDelay = 0.001;
+                    this.value = maxDelay.toFixed(3);
+                } else if (maxDelay > 10.0) {
+                    maxDelay = 10.0;
+                    this.value = maxDelay.toFixed(3);
+                } else {
+                    // Preserve the user's input with proper precision
+                    this.value = parseFloat(this.value).toString();
                 }
 
                 // Ensure max doesn't go below min
                 const minDelay = parseFloat(document.getElementById('auto-run-delay-min').value);
                 if (maxDelay < minDelay) {
-                    document.getElementById('auto-run-delay-min').value = maxDelay;
+                    document.getElementById('auto-run-delay-min').value = maxDelay.toString();
                 }
 
                 sendCommand('update_auto_run_delay', {
@@ -1550,6 +1579,25 @@ html_content = """<!DOCTYPE html>
                 chessState.black_advantage_color = this.value;
                 updateEvaluationBar(chessState.evaluation);
                 sendVisualSettingsToUserscript();
+            });
+
+            // Add event listener for the disable main controls toggle
+            document.getElementById('disable-main-controls').addEventListener('change', function() {
+                // Only process if we're not already updating settings
+                if (isUpdatingSettings) {
+                    console.log('Ignoring disable-main-controls change while settings are being updated');
+                    return;
+                }
+
+                console.log('External board: disable-main-controls changed to', this.checked);
+                chessState.disable_main_controls = this.checked;
+
+                // Send the command to update the userscript
+                sendCommand('update_interface_settings', {
+                    disable_main_controls: this.checked,
+                    settings_last_updated: Date.now() / 1000,
+                    settings_update_source: 'external_board'
+                });
             });
 
             // Function to send visual settings to the userscript
@@ -1787,6 +1835,42 @@ class ChessAIHandler(http.server.SimpleHTTPRequestHandler):
                     response = {
                         "status": "success",
                         "message": "Visual settings updated",
+                        "timestamp": current_time
+                    }
+                elif command == 'update_interface_settings':
+                    # Handle interface settings update from the external board
+                    print("Received interface settings update from external board")
+
+                    # Update the timestamp for this settings change
+                    current_time = time.time()
+
+                    # Interface settings that can be updated
+                    interface_settings_keys = [
+                        "disable_main_controls"
+                    ]
+
+                    # Update the settings
+                    params = data.get('params', {})
+                    for key in interface_settings_keys:
+                        if key in params:
+                            chess_state[key] = params[key]
+
+                    # Update the timestamp and source
+                    chess_state['settings_last_updated'] = current_time
+                    chess_state['settings_update_source'] = 'external_board'
+
+                    # Add the command to the pending commands queue for the userscript
+                    chess_state['pending_commands'].append({
+                        'command': 'update_interface_settings',
+                        'params': params,
+                        'timestamp': current_time
+                    })
+
+                    print(f"Updated interface settings from external board (timestamp: {current_time})")
+
+                    response = {
+                        "status": "success",
+                        "message": "Interface settings updated",
                         "timestamp": current_time
                     }
                 else:
