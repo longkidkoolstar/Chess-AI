@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Chess AI
 // @namespace    github.com/longkidkoolstar
-// @version      2.0.0
+// @version      2.0.1
 // @description  Chess.com Bot/Cheat that finds the best move with evaluation bar and ELO control!
 // @author       longkidkoolstar
 // @license      none
@@ -20,7 +20,7 @@
 // ==/UserScript==
 
 
-const currentVersion = '2.0.0'; // Updated version number
+const currentVersion = '2.0.1'; // Updated version number
 
 function main() {
 
@@ -2501,7 +2501,7 @@ function main() {
 
             // Create main container with header
             var div = document.createElement('div');
-            div.setAttribute('style','background-color:white; height:auto; border-radius: 12px; box-shadow: 0 6px 16px rgba(0,0,0,0.15); padding: 0; max-width: 300px; position: relative; font-family: "Segoe UI", Arial, sans-serif;');
+            div.setAttribute('style','background-color:white; height:auto; border-radius: 12px; box-shadow: 0 6px 16px rgba(0,0,0,0.15); padding: 0; max-width: 300px; max-height: 90vh; overflow-y: auto; position: relative; font-family: "Segoe UI", Arial, sans-serif;');
             div.setAttribute('id','settingsContainer');
 
             // Create header with collapse button
@@ -2628,6 +2628,30 @@ function main() {
 
                 function setTranslate(xPos, yPos, el) {
                     el.style.transform = `translate3d(${xPos}px, ${yPos}px, 0)`;
+
+                    // After setting position, check if container is too tall for the screen
+                    // and adjust position if needed
+                    setTimeout(() => {
+                        const rect = el.getBoundingClientRect();
+                        const windowHeight = window.innerHeight;
+
+                        // If the container extends beyond the bottom of the screen
+                        if (rect.bottom > windowHeight) {
+                            // Calculate how much we need to move it up
+                            const adjustment = Math.min(yPos, rect.bottom - windowHeight + 20);
+                            if (adjustment > 0) {
+                                yOffset = yPos - adjustment;
+                                el.style.transform = `translate3d(${xPos}px, ${yOffset}px, 0)`;
+
+                                // Save the adjusted position
+                                try {
+                                    GM.setValue('GUI Position', { x: xOffset, y: yOffset });
+                                } catch (error) {
+                                    console.error('Error saving adjusted position:', error);
+                                }
+                            }
+                        }
+                    }, 100);
                 }
 
                 return header;
@@ -2644,7 +2668,7 @@ function main() {
             // Create content container
             var contentContainer = document.createElement('div');
             contentContainer.id = 'aiControlsContent';
-            contentContainer.style = 'padding: 15px; font-family: "Segoe UI", Arial, sans-serif; font-size: 14px;';
+            contentContainer.style = 'padding: 15px; font-family: "Segoe UI", Arial, sans-serif; font-size: 14px; overflow-x: hidden;';
 
             // Add CSS for tabs
             var tabStyle = document.createElement('style');
@@ -2656,9 +2680,18 @@ function main() {
                     display: flex;
                     border-bottom: 2px solid #2196F3;
                     margin-bottom: 15px;
-                    overflow-x: hidden; /* Prevent scrolling */
+                    overflow-x: auto; /* Allow horizontal scrolling if needed */
                     flex-wrap: nowrap; /* Keep tabs in a single row */
                     justify-content: space-between; /* Distribute space evenly */
+                    scrollbar-width: thin; /* For Firefox */
+                    -ms-overflow-style: none; /* For IE and Edge */
+                }
+                .tab-nav::-webkit-scrollbar {
+                    height: 4px; /* Small scrollbar for webkit browsers */
+                }
+                .tab-nav::-webkit-scrollbar-thumb {
+                    background-color: rgba(33, 150, 243, 0.3);
+                    border-radius: 4px;
                 }
                 .tab-button {
                     padding: 8px 5px; /* Reduce padding to fit all tabs */
@@ -2671,12 +2704,14 @@ function main() {
                     font-weight: bold;
                     color: #666;
                     flex: 1;
+                    min-width: 60px; /* Ensure minimum width for readability */
                     text-align: center;
                     display: flex;
                     align-items: center;
                     justify-content: center;
                     box-shadow: 0 -2px 5px rgba(0,0,0,0.05);
                     font-size: 12px; /* Reduce font size to fit better */
+                    white-space: nowrap; /* Prevent text wrapping */
                 }
                 .tab-button:hover {
                     background-color: #e9f5ff;
@@ -2712,11 +2747,38 @@ function main() {
                     to { opacity: 1; }
                 }
 
-                /* Responsive design for small screens */
+                /* Responsive design for different screen sizes */
                 @media (max-width: 500px) {
                     .tab-button {
                         padding: 8px 5px;
-                        font-size: 12px;
+                        font-size: 11px;
+                        min-width: 50px;
+                    }
+                }
+
+                /* Adjust container for different screen heights */
+                @media (max-height: 800px) {
+                    #settingsContainer {
+                        max-height: 80vh !important;
+                    }
+                }
+
+                @media (max-height: 600px) {
+                    #settingsContainer {
+                        max-height: 70vh !important;
+                    }
+                }
+
+                /* Ensure content fits on very small screens */
+                @media (max-height: 500px) {
+                    #settingsContainer {
+                        max-height: 60vh !important;
+                    }
+                    .tab-content {
+                        padding: 5px 0;
+                    }
+                    input[type="range"] {
+                        height: 6px;
                     }
                 }
 
@@ -3509,6 +3571,46 @@ function main() {
             keyboardModal.appendChild(modalContent);
             document.body.appendChild(keyboardModal);
 
+            // Function to check and adjust container position if it's too tall for the screen
+            function checkAndAdjustPosition() {
+                const container = document.getElementById('settingsContainer');
+                if (!container) return;
+
+                const rect = container.getBoundingClientRect();
+                const windowHeight = window.innerHeight;
+
+                // If the container extends beyond the bottom of the screen
+                if (rect.bottom > windowHeight) {
+                    // Get current transform values
+                    const transform = container.style.transform;
+                    const match = transform.match(/translate3d\(([^,]+),\s*([^,]+),/);
+
+                    if (match) {
+                        const xPos = parseFloat(match[1]);
+                        const yPos = parseFloat(match[2]);
+
+                        // Calculate how much we need to move it up
+                        const adjustment = Math.min(yPos, rect.bottom - windowHeight + 20);
+                        if (adjustment > 0) {
+                            const newYPos = yPos - adjustment;
+                            container.style.transform = `translate3d(${xPos}px, ${newYPos}px, 0)`;
+
+                            // Update the stored offset if available in the scope
+                            if (typeof xOffset !== 'undefined' && typeof yOffset !== 'undefined') {
+                                yOffset = newYPos;
+
+                                // Save the adjusted position
+                                try {
+                                    GM.setValue('GUI Position', { x: xOffset, y: yOffset });
+                                } catch (error) {
+                                    console.error('Error saving adjusted position:', error);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // Add JavaScript for tab switching
             setTimeout(function() {
                 const tabButtons = document.querySelectorAll('.tab-button');
@@ -3560,6 +3662,8 @@ function main() {
                     });
                 }
 
+
+
                 tabButtons.forEach(button => {
                     button.addEventListener('click', function() {
                         // Remove active class from all tabs
@@ -3569,6 +3673,9 @@ function main() {
                         // Add active class to clicked tab
                         this.classList.add('active');
                         document.getElementById(this.dataset.tab + '-tab').classList.add('active');
+
+                        // Check and adjust position after tab switch (with a slight delay to allow rendering)
+                        setTimeout(checkAndAdjustPosition, 100);
                     });
                 });
             }, 500);
@@ -3706,11 +3813,25 @@ function main() {
                 if (content.style.display === 'none') {
                     content.style.display = 'block';
                     collapseBtn.textContent = '▼';
+
+                    // Check and adjust position after expanding
+                    setTimeout(checkAndAdjustPosition, 100);
                 } else {
                     content.style.display = 'none';
                     collapseBtn.textContent = '▲';
                 }
             };
+
+            // Add window resize event listener to adjust position when window is resized
+            window.addEventListener('resize', function() {
+                // Debounce the resize event to avoid excessive calculations
+                if (this.resizeTimeout) {
+                    clearTimeout(this.resizeTimeout);
+                }
+                this.resizeTimeout = setTimeout(function() {
+                    checkAndAdjustPosition();
+                }, 200);
+            });
 
             $('#evalBarColor').on('change', function() {
                 const theme = $(this).val();
@@ -3766,6 +3887,9 @@ function main() {
                 $('#fusionMode').prop('checked', true);
                 $('#eloSlider').prop('disabled', true);
             }
+
+            // Check and adjust position after settings are loaded
+            setTimeout(checkAndAdjustPosition, 500);
 
             // Periodically check for opponent rating changes when fusion mode is enabled
             setInterval(function() {
