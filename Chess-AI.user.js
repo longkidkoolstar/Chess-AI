@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Chess AI
 // @namespace    github.com/longkidkoolstar
-// @version      2.0.1
+// @version      2.1.0
 // @description  Chess.com Bot/Cheat that finds the best move with evaluation bar and ELO control!
 // @author       longkidkoolstar
 // @license      none
@@ -20,7 +20,7 @@
 // ==/UserScript==
 
 
-const currentVersion = '2.0.1'; // Updated version number
+const currentVersion = '2.1.0'; // Updated version number
 
 function main() {
 
@@ -44,6 +44,7 @@ function main() {
     myVars.serverConnected = false; // Track if connected to local server
     myVars.moveIndicatorLocation = 'main'; // Where to show move indicators: 'main', 'external', or 'both'
     myVars.disableMainControls = false; // Option to disable main controls when connected to external window
+    myVars.autoQueue = false; // Default to not auto-queuing new games
     // Default colors for multicolor mode
     myVars.moveColors = {
         1: '#F44336', // Red for best move
@@ -1066,6 +1067,64 @@ function main() {
         // Remove all arrows
         const arrows = virtualChessboard.querySelectorAll('.virtual-arrow');
         arrows.forEach(arrow => arrow.remove());
+    }
+
+    // Observer instance for auto queue
+    myVars.newGameObserver = null;
+
+    // Function to check for and click the "New" button
+    myFunctions.clickNewGameButton = function() {
+        const buttons = document.querySelectorAll('button');
+        for (let i = 0; i < buttons.length; i++) {
+            if (buttons[i].innerText.includes('New')) {
+                console.log('Auto Queue: Found "New" button, clicking it');
+                buttons[i].click();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Function to start observing for new buttons
+    myFunctions.startNewGameObserver = function() {
+        // First try to click any existing button
+        myFunctions.clickNewGameButton();
+
+        // If observer already exists, disconnect it first
+        if (myVars.newGameObserver) {
+            myFunctions.stopNewGameObserver();
+        }
+
+        // Create a new observer
+        myVars.newGameObserver = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                if (mutation.addedNodes.length > 0) {
+                    myFunctions.clickNewGameButton();
+                }
+            });
+        });
+
+        // Start observing the document body for changes
+        myVars.newGameObserver.observe(document.body, { childList: true, subtree: true });
+        console.log('Auto Queue: Started observing for New Game buttons');
+    }
+
+    // Function to stop observing
+    myFunctions.stopNewGameObserver = function() {
+        if (myVars.newGameObserver) {
+            myVars.newGameObserver.disconnect();
+            myVars.newGameObserver = null;
+            console.log('Auto Queue: Stopped observing for New Game buttons');
+        }
+    }
+
+    // Function to toggle the auto queue observer based on the current setting
+    myFunctions.updateAutoQueueObserver = function() {
+        if (myVars.autoQueue) {
+            myFunctions.startNewGameObserver();
+        } else {
+            myFunctions.stopNewGameObserver();
+        }
     }
 
     // Function to draw an arrow on the chess board
@@ -3258,6 +3317,20 @@ function main() {
                         </div>
                     </div>
 
+                    <div style="margin-bottom: 20px; border-left: 3px solid #9C27B0; padding-left: 12px;">
+                        <div style="display: flex; align-items: center; margin-bottom: 10px;">
+                            <label for="autoQueue" style="margin-right: 10px; font-weight: bold; color: #9C27B0;">Auto Queue:</label>
+                            <label class="switch">
+                                <input type="checkbox" id="autoQueue" name="autoQueue" value="false">
+                                <span class="slider" style="background-color: #ccc;"></span>
+                            </label>
+                            <span id="autoQueueStatus" style="margin-left: 10px; font-size: 12px; color: #666;">Off</span>
+                        </div>
+                        <div style="font-size: 12px; color: #666; margin-bottom: 10px;">
+                            Automatically clicks "New Game" button when a game ends
+                        </div>
+                    </div>
+
                     <div style="margin-top: 15px; background-color: #f8f8f8; padding: 12px; border-radius: 6px;">
                         <label style="display: block; margin-bottom: 10px; font-weight: bold;">Auto Run Delay (Seconds):</label>
                         <div style="display: flex; align-items: center; gap: 10px;">
@@ -3662,6 +3735,19 @@ function main() {
                     });
                 }
 
+                // Handle Auto Queue toggle
+                const autoQueueCheckbox = document.getElementById('autoQueue');
+                const autoQueueStatus = document.getElementById('autoQueueStatus');
+                if (autoQueueCheckbox && autoQueueStatus) {
+                    autoQueueCheckbox.addEventListener('change', function() {
+                        myVars.autoQueue = this.checked;
+                        autoQueueStatus.textContent = this.checked ? 'On' : 'Off';
+                        autoQueueStatus.style.color = this.checked ? '#9C27B0' : '#666';
+
+                        // Update the observer based on the new setting
+                        myFunctions.updateAutoQueueObserver();
+                    });
+                }
 
 
                 tabButtons.forEach(button => {
@@ -4662,6 +4748,8 @@ function main() {
                 myFunctions.clearHighlights();
                 myFunctions.clearArrows();
                 myVars.lastPositionFEN = currentFEN;
+
+                // No need to check for game end here anymore as we're using MutationObserver
             }
         }
     }, 100);
@@ -5328,6 +5416,7 @@ function main() {
             moveIndicatorType: myVars.moveIndicatorType || 'highlights',
             autoRun: $('#autoRun')[0].checked,
             autoMove: $('#autoMove')[0].checked,
+            autoQueue: $('#autoQueue')[0].checked,
             timeDelayMin: parseFloat($('#timeDelayMin')[0].value),
             timeDelayMax: parseFloat($('#timeDelayMax')[0].value),
             evalBarTheme: $('#evalBarColor').val(),
@@ -5415,6 +5504,7 @@ function main() {
                 myVars.moveIndicatorType = settings.moveIndicatorType || 'highlights';
                 myVars.autoRun = settings.autoRun !== undefined ? settings.autoRun : false;
                 myVars.autoMove = settings.autoMove !== undefined ? settings.autoMove : false;
+                myVars.autoQueue = settings.autoQueue !== undefined ? settings.autoQueue : false;
                 myVars.fusionMode = settings.fusionMode !== undefined ? settings.fusionMode : false;
                 myVars.whiteAdvantageColor = settings.whiteAdvantageColor || '#4CAF50';
                 myVars.blackAdvantageColor = settings.blackAdvantageColor || '#F44336';
@@ -5469,6 +5559,12 @@ function main() {
 
                 if ($('#autoRun')[0]) {
                     $('#autoRun')[0].checked = myVars.autoRun;
+                }
+
+                if ($('#autoQueue')[0]) {
+                    $('#autoQueue')[0].checked = myVars.autoQueue;
+                    $('#autoQueueStatus').text(myVars.autoQueue ? 'On' : 'Off');
+                    $('#autoQueueStatus').css('color', myVars.autoQueue ? '#9C27B0' : '#666');
                 }
 
                 if ($('#showArrows')[0]) {
@@ -5633,6 +5729,7 @@ function main() {
                 const savedElo = await GM.getValue('elo', 1500);
                 const savedAutoMove = await GM.getValue('autoMove', false);
                 const savedAutoRun = await GM.getValue('autoRun', false);
+                const savedAutoQueue = await GM.getValue('autoQueue', false);
                 const savedShowArrows = await GM.getValue('showArrows', true);
                 const savedPersistentHighlights = await GM.getValue('persistentHighlights', true);
                 const savedMoveIndicatorType = await GM.getValue('moveIndicatorType', 'highlights');
@@ -5647,6 +5744,7 @@ function main() {
                 myVars.eloRating = savedElo;
                 myVars.autoMove = savedAutoMove;
                 myVars.autoRun = savedAutoRun;
+                myVars.autoQueue = savedAutoQueue;
                 myVars.showArrows = savedShowArrows;
                 myVars.persistentHighlights = savedPersistentHighlights;
                 myVars.moveIndicatorType = savedMoveIndicatorType;
@@ -5672,6 +5770,12 @@ function main() {
 
                 if ($('#autoRun')[0]) {
                     $('#autoRun')[0].checked = savedAutoRun;
+                }
+
+                if ($('#autoQueue')[0]) {
+                    $('#autoQueue')[0].checked = savedAutoQueue;
+                    $('#autoQueueStatus').text(savedAutoQueue ? 'On' : 'Off');
+                    $('#autoQueueStatus').css('color', savedAutoQueue ? '#9C27B0' : '#666');
                 }
 
                 if ($('#showArrows')[0]) {
@@ -5730,6 +5834,9 @@ function main() {
             }
 
             console.log('Settings loaded successfully');
+
+            // Initialize auto queue observer if enabled
+            myFunctions.updateAutoQueueObserver();
         } catch (error) {
             console.error('Error loading settings:', error);
         }
