@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Chess AI
 // @namespace    github.com/longkidkoolstar
-// @version      2.1.0
+// @version      3.0.0
 // @description  Chess.com Bot/Cheat that finds the best move with evaluation bar and ELO control!
 // @author       longkidkoolstar
 // @license      none
@@ -20,7 +20,7 @@
 // ==/UserScript==
 
 
-const currentVersion = '2.1.0'; // Updated version number
+const currentVersion = '3.0.0'; // Updated version number
 
 function main() {
 
@@ -2235,7 +2235,102 @@ function main() {
     }
 
     var lastValue = 11;
-    myFunctions.runChessEngine = function(depth){
+    // Opening book functionality
+    myVars.openingBook = null;
+    myVars.useOpeningBook = true; // Default to using opening book
+    
+    myFunctions.fetchOpeningBook = async function() {
+        try {
+            const response = await fetch('https://api.jsonsilo.com/public/0534bf73-ade1-41dc-817d-74581d4b2331');
+            const data = await response.json();
+            myVars.openingBook = data;
+            console.log('Opening book loaded with', Object.keys(data).length, 'positions');
+            return data;
+        } catch (error) {
+            console.error('Failed to fetch opening book:', error);
+            myVars.openingBook = null;
+            return null;
+        }
+    };
+    
+    myFunctions.getOpeningMove = function(fen) {
+        if (!myVars.useOpeningBook || !myVars.openingBook) {
+            return null;
+        }
+        
+        // Check if current position is in opening book
+        const position = myVars.openingBook[fen];
+        if (position && position.moves) {
+            // Parse the moves string to get all moves
+            const moves = position.moves.trim().split(/\s+/);
+            
+            // Filter out move numbers (like "1.", "2.", etc.)
+            const actualMoves = moves.filter(move => !move.match(/^\d+\.$/));
+            
+            if (actualMoves.length === 0) {
+                return null;
+            }
+            
+            // Get the last move
+            const lastMove = actualMoves[actualMoves.length - 1];
+            
+            // Convert algebraic notation to UCI format if needed
+            const uciMove = myFunctions.algebraicToUci(lastMove, fen);
+            
+            console.log('Opening book move found:', {
+                name: position.name,
+                eco: position.eco,
+                move: lastMove,
+                uci: uciMove,
+                allMoves: actualMoves
+            });
+            
+            return uciMove;
+        }
+        
+        return null;
+    };
+    
+    myFunctions.algebraicToUci = function(algebraicMove, fen) {
+        // Simple conversion for common moves - this is a basic implementation
+        // For a complete implementation, you'd need a full chess library
+        try {
+            // Remove check/checkmate symbols
+            let move = algebraicMove.replace(/[+#]/g, '');
+            
+            // Handle castling
+            if (move === 'O-O') {
+                // Determine if white or black to move
+                const isWhite = fen.includes(' w ');
+                return isWhite ? 'e1g1' : 'e8g8';
+            }
+            if (move === 'O-O-O') {
+                const isWhite = fen.includes(' w ');
+                return isWhite ? 'e1c1' : 'e8c8';
+            }
+            
+            // For now, return null for complex moves - engine will handle them
+            // A full implementation would parse piece moves, captures, etc.
+            return null;
+        } catch (error) {
+            console.error('Error converting algebraic to UCI:', error);
+            return null;
+        }
+    };
+    
+    myFunctions.updateOpeningBookStatus = function() {
+        const statusElement = $('#openingBookLoadStatus');
+        if (myVars.openingBook) {
+            const count = Object.keys(myVars.openingBook).length;
+            statusElement.text(`Opening book loaded (${count} positions)`);
+            statusElement.css('color', '#4CAF50');
+        } else {
+            statusElement.text('Failed to load opening book');
+            statusElement.css('color', '#F44336');
+        }
+    };
+
+    myFunctions.runChessEngine = async function(depth){
         // Use the depth from slider if no specific depth is provided
         if (depth === undefined) {
             depth = parseInt($('#depthSlider')[0].value);
@@ -2245,6 +2340,39 @@ function main() {
         if (myVars.maxDepthForElo !== undefined && depth > myVars.maxDepthForElo) {
             depth = myVars.maxDepthForElo;
             console.log(`Depth limited to ${depth} based on current ELO setting`);
+        }
+
+        var fen = board.game.getFEN();
+        
+        // Check opening book first
+        if (myVars.useOpeningBook) {
+            // Load opening book if not already loaded
+            if (!myVars.openingBook) {
+                await myFunctions.fetchOpeningBook();
+            }
+            
+            const openingMove = myFunctions.getOpeningMove(fen);
+            if (openingMove) {
+                console.log('Using opening book move:', openingMove);
+                // Simulate engine response with opening move
+                setTimeout(() => {
+                    myVars.bestMove = openingMove;
+                    myFunctions.color(openingMove);
+                    isThinking = false;
+                    myVars.engineRunning = false;
+                    
+                    // Update auto run status if auto run is enabled
+                    if (myVars.autoRun) {
+                        myFunctions.updateAutoRunStatus('on');
+                    }
+                    
+                    // Update the server if external window is open
+                    if (myVars.useExternalWindow && myVars.externalWindowOpen && myVars.serverConnected) {
+                        myFunctions.sendServerUpdate();
+                    }
+                }, 100); // Small delay to simulate thinking
+                return;
+            }
         }
 
         // Reset topMoves array before starting a new analysis
@@ -2262,8 +2390,6 @@ function main() {
             engine.engine.postMessage(`setoption name MultiPV value 1`);
         }
 
-        //var fen = myFunctions.rescan();
-        var fen = board.game.getFEN();
         engine.engine.postMessage(`position fen ${fen}`);
         console.log('updated: ' + `position fen ${fen}`);
         isThinking = true;
@@ -3040,6 +3166,25 @@ function main() {
                         <div id="eloDepthInfo" style="font-size: 12px; color: #666; margin-top: 5px; font-style: italic;">
                     Note: Lower ELO settings will limit the maximum search depth
                         </div>
+                </div>
+                
+                <!-- Opening Book Settings -->
+                <div style="margin-bottom: 15px; padding: 10px; background-color: #f5f5f5; border-radius: 4px; border-left: 3px solid #4CAF50;">
+                    <div style="display: flex; align-items: center; margin-bottom: 10px;">
+                        <label for="useOpeningBook" style="margin-right: 10px; font-weight: bold;">Opening Book:</label>
+                        <label class="switch">
+                            <input type="checkbox" id="useOpeningBook" checked>
+                            <span class="slider"></span>
+                        </label>
+                        <span id="openingBookStatus" style="margin-left: 10px; font-size: 12px; color: #666;">Enabled</span>
+                        <button id="openingBookInfoBtn" title="Opening book provides known good moves for the opening phase of the game" style="margin-left: 5px; padding: 0 5px; background-color: #4CAF50; color: white; border: none; border-radius: 50%; cursor: pointer; font-size: 12px;">?</button>
+                    </div>
+                    <div id="openingBookInfo" style="font-size: 12px; color: #666; margin-top: 5px;">
+                        Uses a database of opening moves to play strong opening theory
+                    </div>
+                    <div id="openingBookLoadStatus" style="font-size: 11px; color: #999; margin-top: 3px;">
+                        Opening book not loaded
+                    </div>
                 </div>
             </div>
 
@@ -4059,6 +4204,40 @@ function main() {
             $('#eloInfoBtn').on('click', function() {
                 document.getElementById('eloInfoModal').style.display = 'flex';
             });
+            
+            // Opening book event handlers
+            $('#useOpeningBook').on('change', function() {
+                myVars.useOpeningBook = this.checked;
+                const status = $('#openingBookStatus');
+                status.text(this.checked ? 'Enabled' : 'Disabled');
+                status.css('color', this.checked ? '#4CAF50' : '#666');
+                
+                // Load opening book if enabled and not already loaded
+                if (this.checked && !myVars.openingBook) {
+                    $('#openingBookLoadStatus').text('Loading opening book...');
+                    myFunctions.fetchOpeningBook().then(() => {
+                        myFunctions.updateOpeningBookStatus();
+                    });
+                }
+            });
+            
+            $('#openingBookInfoBtn').on('click', function() {
+                const info = `
+                    <div style="max-width: 400px; line-height: 1.4;">
+                        <h3 style="margin-top: 0; color: #4CAF50;">Opening Book</h3>
+                        <p>The opening book contains thousands of known opening positions with the best theoretical moves.</p>
+                        <p><strong>Benefits:</strong></p>
+                        <ul>
+                            <li>Plays strong opening theory</li>
+                            <li>Faster than engine calculation</li>
+                            <li>Includes opening names and ECO codes</li>
+                            <li>Covers popular openings and variations</li>
+                        </ul>
+                        <p>When enabled, the AI will check the opening book first before using the engine to calculate moves.</p>
+                    </div>
+                `;
+                myFunctions.showModal('Opening Book Information', info);
+            });
 
             // Create Human Mode info modal
             var humanModeInfoModal = document.createElement('div');
@@ -4724,6 +4903,15 @@ function main() {
 
         if(!engine.engine){
             myFunctions.loadChessEngine();
+        }
+        
+        // Load opening book on startup
+        if (myVars.useOpeningBook && !myVars.openingBook) {
+            myFunctions.fetchOpeningBook().then(() => {
+                if (typeof myFunctions.updateOpeningBookStatus === 'function') {
+                    myFunctions.updateOpeningBookStatus();
+                }
+            });
         }
 
         // Check if the board exists and we haven't set up the move listener yet
