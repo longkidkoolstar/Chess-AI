@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Chess AI
 // @namespace    github.com/longkidkoolstar
-// @version      3.0.0
+// @version      3.1.0
 // @description  Chess.com Bot/Cheat that finds the best move with evaluation bar and ELO control!
 // @author       longkidkoolstar
 // @license      none
@@ -20,7 +20,7 @@
 // ==/UserScript==
 
 
-const currentVersion = '3.0.0'; // Updated version number
+const currentVersion = '3.1.0'; // Updated version number
 
 function main() {
 
@@ -53,6 +53,9 @@ function main() {
         4: '#4CAF50', // Green for 4th best
         5: '#2196F3'  // Blue for 5th best
     }
+    // Opening display variables
+    myVars.currentOpening = null; // Current detected opening information
+    myVars.showOpeningDisplay = true; // Whether to show opening names
     var myFunctions = document.myFunctions = {};
 
     // Function to download the Python server using GM.download with fallback
@@ -2330,6 +2333,78 @@ function main() {
         }
     };
 
+    // Function to get opening information for the current position
+    myFunctions.getOpeningInfo = function(fen) {
+        if (!myVars.useOpeningBook || !myVars.openingBook) {
+            return null;
+        }
+
+        // Check if current position is in opening book
+        const position = myVars.openingBook[fen];
+        if (position && position.name) {
+            return {
+                name: position.name,
+                eco: position.eco || '',
+                fen: fen
+            };
+        }
+
+        return null;
+    };
+
+    // Function to update the opening display
+    myFunctions.updateOpeningDisplay = function(openingInfo) {
+        if (!myVars.showOpeningDisplay) return;
+
+        const openingDisplay = document.getElementById('openingDisplay');
+        if (!openingDisplay) return;
+
+        if (openingInfo && openingInfo.name) {
+            // Store current opening info
+            myVars.currentOpening = openingInfo;
+
+            // Update display content
+            const ecoText = openingInfo.eco ? ` (${openingInfo.eco})` : '';
+            openingDisplay.innerHTML = `
+                <div style="font-weight: 600; font-size: 13px; color: #2c3e50; margin-bottom: 2px;">
+                    ${openingInfo.name}
+                </div>
+                <div style="font-size: 11px; color: #7f8c8d;">
+                    ${ecoText}
+                </div>
+            `;
+            openingDisplay.style.display = 'block';
+
+            console.log('Opening detected:', openingInfo.name, ecoText);
+        } else {
+            // Hide display if no opening detected
+            openingDisplay.style.display = 'none';
+            myVars.currentOpening = null;
+        }
+    };
+
+    // Function to manually check and update opening display (for testing)
+    myFunctions.checkCurrentOpening = function() {
+        if (!board || !myVars.useOpeningBook || !myVars.openingBook) {
+            console.log('Cannot check opening: board not ready or opening book not loaded');
+            return;
+        }
+
+        try {
+            const currentFEN = board.game.getFEN();
+            const openingInfo = myFunctions.getOpeningInfo(currentFEN);
+            myFunctions.updateOpeningDisplay(openingInfo);
+
+            if (openingInfo) {
+                console.log('Current opening:', openingInfo);
+            } else {
+                console.log('No opening detected for current position');
+            }
+        } catch (error) {
+            console.error('Error checking current opening:', error);
+        }
+    };
+
     myFunctions.runChessEngine = async function(depth){
         // Use the depth from slider if no specific depth is provided
         if (depth === undefined) {
@@ -2343,14 +2418,20 @@ function main() {
         }
 
         var fen = board.game.getFEN();
-        
+
+        // Check for opening information and update display
+        if (myVars.useOpeningBook && myVars.openingBook) {
+            const openingInfo = myFunctions.getOpeningInfo(fen);
+            myFunctions.updateOpeningDisplay(openingInfo);
+        }
+
         // Check opening book first
         if (myVars.useOpeningBook) {
             // Load opening book if not already loaded
             if (!myVars.openingBook) {
                 await myFunctions.fetchOpeningBook();
             }
-            
+
             const openingMove = myFunctions.getOpeningMove(fen);
             if (openingMove) {
                 console.log('Using opening book move:', openingMove);
@@ -2360,12 +2441,12 @@ function main() {
                     myFunctions.color(openingMove);
                     isThinking = false;
                     myVars.engineRunning = false;
-                    
+
                     // Update auto run status if auto run is enabled
                     if (myVars.autoRun) {
                         myFunctions.updateAutoRunStatus('on');
                     }
-                    
+
                     // Update the server if external window is open
                     if (myVars.useExternalWindow && myVars.externalWindowOpen && myVars.serverConnected) {
                         myFunctions.sendServerUpdate();
@@ -2676,6 +2757,54 @@ function main() {
                 scaleMarkers.appendChild(tick);
             });
 
+            // Create opening display element
+            const openingDisplay = document.createElement('div');
+            openingDisplay.id = 'openingDisplay';
+            openingDisplay.style = `
+                position: absolute;
+                top: -70px;
+                left: -5px;
+                min-width: 120px;
+                max-width: 200px;
+                padding: 8px 10px;
+                background-color: #ffffff;
+                border: 1px solid #e0e0e0;
+                border-radius: 6px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+                z-index: 102;
+                font-family: 'Segoe UI', Arial, sans-serif;
+                text-align: center;
+                display: none;
+                transition: opacity 0.3s ease;
+                word-wrap: break-word;
+                line-height: 1.3;
+            `;
+
+            // Add responsive behavior for smaller screens
+            const mediaQuery = window.matchMedia('(max-width: 768px)');
+            function handleScreenSizeChange(e) {
+                if (e.matches) {
+                    // Mobile/tablet view - adjust positioning
+                    openingDisplay.style.fontSize = '11px';
+                    openingDisplay.style.maxWidth = '150px';
+                    openingDisplay.style.padding = '6px 8px';
+                } else {
+                    // Desktop view - normal sizing
+                    openingDisplay.style.fontSize = '13px';
+                    openingDisplay.style.maxWidth = '200px';
+                    openingDisplay.style.padding = '8px 10px';
+                }
+            }
+
+            // Initial check and add listener
+            handleScreenSizeChange(mediaQuery);
+            if (mediaQuery.addEventListener) {
+                mediaQuery.addEventListener('change', handleScreenSizeChange);
+            } else {
+                // Fallback for older browsers
+                mediaQuery.addListener(handleScreenSizeChange);
+            }
+
             // Add elements to the DOM
             evalBarContainer.appendChild(evalBar);
             evalBarContainer.appendChild(centerLine);
@@ -2683,6 +2812,7 @@ function main() {
             board.parentElement.style.position = 'relative';
             board.parentElement.appendChild(evalBarContainer);
             board.parentElement.appendChild(evalText);
+            board.parentElement.appendChild(openingDisplay);
 
             // Create main container with header
             var div = document.createElement('div');
@@ -3184,6 +3314,21 @@ function main() {
                     </div>
                     <div id="openingBookLoadStatus" style="font-size: 11px; color: #999; margin-top: 3px;">
                         Opening book not loaded
+                    </div>
+
+                    <!-- Opening Display Toggle -->
+                    <div style="margin-top: 10px; padding-top: 8px; border-top: 1px solid #ddd;">
+                        <div style="display: flex; align-items: center;">
+                            <label for="showOpeningDisplay" style="margin-right: 10px; font-weight: bold; font-size: 12px;">Show Opening Names:</label>
+                            <label class="switch" style="transform: scale(0.8);">
+                                <input type="checkbox" id="showOpeningDisplay" checked>
+                                <span class="slider"></span>
+                            </label>
+                            <span id="openingDisplayStatus" style="margin-left: 8px; font-size: 11px; color: #666;">Enabled</span>
+                        </div>
+                        <div style="font-size: 11px; color: #666; margin-top: 3px;">
+                            Display detected opening names near the evaluation bar
+                        </div>
                     </div>
                 </div>
             </div>
@@ -4239,6 +4384,27 @@ function main() {
                 myFunctions.showModal('Opening Book Information', info);
             });
 
+            // Opening display toggle event handler
+            $('#showOpeningDisplay').on('change', function() {
+                myVars.showOpeningDisplay = this.checked;
+                const status = $('#openingDisplayStatus');
+                status.text(this.checked ? 'Enabled' : 'Disabled');
+                status.css('color', this.checked ? '#4CAF50' : '#666');
+
+                // Update the display immediately
+                if (this.checked && myVars.useOpeningBook && myVars.openingBook && board) {
+                    const currentFEN = board.game.getFEN();
+                    const openingInfo = myFunctions.getOpeningInfo(currentFEN);
+                    myFunctions.updateOpeningDisplay(openingInfo);
+                } else {
+                    // Hide the display
+                    const openingDisplay = document.getElementById('openingDisplay');
+                    if (openingDisplay) {
+                        openingDisplay.style.display = 'none';
+                    }
+                }
+            });
+
             // Create Human Mode info modal
             var humanModeInfoModal = document.createElement('div');
             humanModeInfoModal.id = 'humanModeInfoModal';
@@ -4911,8 +5077,18 @@ function main() {
                 if (typeof myFunctions.updateOpeningBookStatus === 'function') {
                     myFunctions.updateOpeningBookStatus();
                 }
+
+                // Check for opening on initial load after opening book is loaded
+                setTimeout(() => {
+                    if (board && myVars.showOpeningDisplay) {
+                        myFunctions.checkCurrentOpening();
+                    }
+                }, 1000);
             });
         }
+
+        // Make opening check function available globally for testing
+        window.checkOpening = myFunctions.checkCurrentOpening;
 
         // Check if the board exists and we haven't set up the move listener yet
         if (board && !board._highlightListenerAdded) {
@@ -4920,6 +5096,12 @@ function main() {
             try {
                 // Store the current position FEN to detect changes
                 myVars.lastPositionFEN = board.game.getFEN();
+
+                // Check for opening information on initial load
+                if (myVars.useOpeningBook && myVars.openingBook) {
+                    const openingInfo = myFunctions.getOpeningInfo(myVars.lastPositionFEN);
+                    myFunctions.updateOpeningDisplay(openingInfo);
+                }
 
                 // Mark that we've added the listener
                 board._highlightListenerAdded = true;
@@ -4936,6 +5118,12 @@ function main() {
                 myFunctions.clearHighlights();
                 myFunctions.clearArrows();
                 myVars.lastPositionFEN = currentFEN;
+
+                // Update opening display when position changes
+                if (myVars.useOpeningBook && myVars.openingBook) {
+                    const openingInfo = myFunctions.getOpeningInfo(currentFEN);
+                    myFunctions.updateOpeningDisplay(openingInfo);
+                }
 
                 // No need to check for game end here anymore as we're using MutationObserver
             }
@@ -5627,6 +5815,8 @@ function main() {
             useVirtualChessboard: $('#useVirtualChessboard')[0].checked,
             useExternalWindow: $('#useExternalWindow')[0].checked,
             disableMainControls: myVars.disableMainControls || false,
+            useOpeningBook: $('#useOpeningBook')[0].checked,
+            showOpeningDisplay: $('#showOpeningDisplay')[0].checked,
             fusionMode: myVars.fusionMode,
             humanMode: myVars.humanMode ? {
                 active: myVars.humanMode.active,
@@ -5705,6 +5895,8 @@ function main() {
                 myVars.useVirtualChessboard = settings.useVirtualChessboard !== undefined ? settings.useVirtualChessboard : false;
                 myVars.useExternalWindow = settings.useExternalWindow !== undefined ? settings.useExternalWindow : false;
                 myVars.disableMainControls = settings.disableMainControls !== undefined ? settings.disableMainControls : false;
+                myVars.useOpeningBook = settings.useOpeningBook !== undefined ? settings.useOpeningBook : true;
+                myVars.showOpeningDisplay = settings.showOpeningDisplay !== undefined ? settings.showOpeningDisplay : true;
 
                 // Load settings timestamp if available, or initialize it
                 myVars.settings_last_updated = settings.settings_last_updated || (Date.now() / 1000);
@@ -5910,6 +6102,22 @@ function main() {
                     if (settings.evalBarTheme === 'custom') {
                         $('#customColorContainer').show();
                     }
+                }
+
+                // Set opening book toggle
+                if ($('#useOpeningBook')[0]) {
+                    $('#useOpeningBook')[0].checked = myVars.useOpeningBook;
+                    const status = $('#openingBookStatus');
+                    status.text(myVars.useOpeningBook ? 'Enabled' : 'Disabled');
+                    status.css('color', myVars.useOpeningBook ? '#4CAF50' : '#666');
+                }
+
+                // Set opening display toggle
+                if ($('#showOpeningDisplay')[0]) {
+                    $('#showOpeningDisplay')[0].checked = myVars.showOpeningDisplay;
+                    const status = $('#openingDisplayStatus');
+                    status.text(myVars.showOpeningDisplay ? 'Enabled' : 'Disabled');
+                    status.css('color', myVars.showOpeningDisplay ? '#4CAF50' : '#666');
                 }
             } else {
                 // Fallback to old method for backward compatibility
