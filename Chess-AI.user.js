@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Chess AI
 // @namespace    github.com/longkidkoolstar
-// @version      4.0.0
+// @version      4.0.1
 // @description  Chess.com Bot/Cheat that finds the best move with evaluation bar and ELO control!
 // @author       longkidkoolstar
 // @license      none
@@ -20,7 +20,7 @@
 // ==/UserScript==
 
 
-const currentVersion = '4.0.0'; // Updated version number
+const currentVersion = '4.0.1'; // Updated version number
 
 function main() {
 
@@ -2179,7 +2179,7 @@ function main() {
 
 
     // Function to set engine ELO
-    function setEngineElo(elo) {
+    function setEngineElo(elo, skipDepthAdjustment = false) {
         if(!engine.engine) return;
 
         // Stockfish supports UCI_Elo option to limit playing strength
@@ -2213,8 +2213,8 @@ function main() {
         // Store the max depth for this ELO
         myVars.maxDepthForElo = maxDepth;
 
-        // Update the depth slider max value based on ELO
-        if ($('#depthSlider')[0]) {
+        // Update the depth slider max value based on ELO (unless we're loading settings)
+        if ($('#depthSlider')[0] && !skipDepthAdjustment) {
             // Only update the max if the current value is higher than the new max
             if (parseInt($('#depthSlider')[0].value) > maxDepth) {
                 $('#depthSlider')[0].value = maxDepth;
@@ -2222,6 +2222,21 @@ function main() {
             }
 
             // Update the slider's max attribute
+            $('#depthSlider')[0].max = maxDepth;
+
+            // Add a note about depth limitation
+            const depthNote = document.getElementById('depthNote');
+            if (depthNote) {
+                depthNote.textContent = `(Max depth ${maxDepth} for ELO ${elo})`;
+            } else if ($('#depthText')[0]) {
+                const note = document.createElement('span');
+                note.id = 'depthNote';
+                note.style = 'font-size: 12px; color: #666; margin-left: 5px;';
+                note.textContent = `(Max depth ${maxDepth} for ELO ${elo})`;
+                $('#depthText')[0].appendChild(note);
+            }
+        } else if ($('#depthSlider')[0] && skipDepthAdjustment) {
+            // When loading settings, just update the max attribute without changing the value
             $('#depthSlider')[0].max = maxDepth;
 
             // Add a note about depth limitation
@@ -6422,7 +6437,7 @@ function main() {
 
                 if ($('#eloSlider')[0]) {
                     $('#eloSlider')[0].value = myVars.eloRating;
-                    $('#eloText').html('Current ELO: <strong>' + myVars.eloRating + '</strong>');
+                    $('#eloValue')[0].textContent = myVars.eloRating;
                 }
 
                 if ($('#autoMove')[0]) {
@@ -6743,7 +6758,7 @@ function main() {
 
                 if ($('#eloSlider')[0]) {
                     $('#eloSlider')[0].value = savedElo;
-                    $('#eloText').html('Current ELO: <strong>' + savedElo + '</strong>');
+                    $('#eloValue')[0].textContent = savedElo;
                 }
 
                 if ($('#autoMove')[0]) {
@@ -6842,6 +6857,12 @@ function main() {
             }
 
             console.log('Settings loaded successfully');
+
+            // Update engine ELO after settings are loaded (skip depth adjustment to preserve saved depth)
+            if (engine.engine && myVars.eloRating) {
+                setEngineElo(myVars.eloRating, true);
+                console.log('Engine ELO updated to:', myVars.eloRating, '(depth preserved)');
+            }
 
             // Initialize auto queue observer if enabled
             myFunctions.updateAutoQueueObserver();
