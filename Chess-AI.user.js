@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Chess AI
 // @namespace    github.com/longkidkoolstar
-// @version      3.1.0
+// @version      3.1.1
 // @description  Chess.com Bot/Cheat that finds the best move with evaluation bar and ELO control!
 // @author       longkidkoolstar
 // @license      none
@@ -20,7 +20,7 @@
 // ==/UserScript==
 
 
-const currentVersion = '3.1.0'; // Updated version number
+const currentVersion = '3.1.1'; // Updated version number
 
 function main() {
 
@@ -4257,13 +4257,6 @@ function main() {
             // Load saved settings
             myFunctions.loadSettings();
 
-            // Update fusion mode status based on saved settings
-            if (myVars.fusionMode) {
-                myFunctions.updateFusionMode(true);
-                $('#fusionMode').prop('checked', true);
-                $('#eloSlider').prop('disabled', true);
-            }
-
             // Check and adjust position after settings are loaded
             setTimeout(checkAndAdjustPosition, 500);
 
@@ -6119,6 +6112,18 @@ function main() {
                     status.text(myVars.showOpeningDisplay ? 'Enabled' : 'Disabled');
                     status.css('color', myVars.showOpeningDisplay ? '#4CAF50' : '#666');
                 }
+
+                // Initialize fusion mode UI after settings are loaded
+                if (myVars.fusionMode) {
+                    myFunctions.updateFusionMode(true);
+                    $('#eloSlider').prop('disabled', true);
+                }
+
+                // Initialize human mode UI after settings are loaded
+                if (myVars.humanMode && myVars.humanMode.active) {
+                    myFunctions.updateHumanMode(true);
+                    $('#eloSlider').prop('disabled', true);
+                }
             } else {
                 // Fallback to old method for backward compatibility
                 const savedDepth = await GM.getValue('depth', 11);
@@ -6211,6 +6216,18 @@ function main() {
 
                 if ($('#blackAdvantageColor')[0]) {
                     $('#blackAdvantageColor')[0].value = savedBlackAdvantageColor;
+                }
+
+                // Initialize fusion mode UI after settings are loaded (legacy format)
+                if (myVars.fusionMode) {
+                    myFunctions.updateFusionMode(true);
+                    $('#eloSlider').prop('disabled', true);
+                }
+
+                // Initialize human mode UI after settings are loaded (legacy format)
+                if (myVars.humanMode && myVars.humanMode.active) {
+                    myFunctions.updateHumanMode(true);
+                    $('#eloSlider').prop('disabled', true);
                 }
 
                 // After loading the settings from individual values, save them as a combined object
