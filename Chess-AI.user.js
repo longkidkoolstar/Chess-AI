@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Chess AI
 // @namespace    github.com/longkidkoolstar
-// @version      3.1.1
+// @version      4.0.0
 // @description  Chess.com Bot/Cheat that finds the best move with evaluation bar and ELO control!
 // @author       longkidkoolstar
 // @license      none
@@ -20,7 +20,7 @@
 // ==/UserScript==
 
 
-const currentVersion = '3.1.1'; // Updated version number
+const currentVersion = '4.0.0'; // Updated version number
 
 function main() {
 
@@ -45,6 +45,18 @@ function main() {
     myVars.moveIndicatorLocation = 'main'; // Where to show move indicators: 'main', 'external', or 'both'
     myVars.disableMainControls = false; // Option to disable main controls when connected to external window
     myVars.autoQueue = false; // Default to not auto-queuing new games
+    // Clock synchronization variables
+    myVars.clockSync = false; // Default to not using clock synchronization
+    myVars.lastOpponentTime = null; // Last recorded opponent time in seconds
+    myVars.lastPlayerTime = null; // Last recorded player time in seconds
+    myVars.clockSyncMinDelay = 0.5; // Minimum delay in seconds when using clock sync
+    myVars.clockSyncMaxDelay = 10; // Maximum delay in seconds when using clock sync
+    myVars.clockSyncExactMatch = false; // Default to not using exact time matching
+    myVars.clockSyncCalculationTime = 0.2; // Estimated time for move calculation and execution
+    // Time pressure variables
+    myVars.clockSyncTimePressure = true; // Default to enabling time pressure override
+    myVars.clockSyncTimePressureThreshold = 20; // Seconds threshold for time pressure mode
+    myVars.clockSyncTimePressureActive = false; // Track if time pressure mode is currently active
     // Default colors for multicolor mode
     myVars.moveColors = {
         1: '#F44336', // Red for best move
@@ -57,6 +69,275 @@ function main() {
     myVars.currentOpening = null; // Current detected opening information
     myVars.showOpeningDisplay = true; // Whether to show opening names
     var myFunctions = document.myFunctions = {};
+
+    // Clock synchronization functions
+    myFunctions.parseTimeString = function(timeString) {
+        if (!timeString || typeof timeString !== 'string') return null;
+
+        // Remove any non-digit and non-colon characters
+        const cleanTime = timeString.replace(/[^\d:]/g, '');
+
+        // Handle different time formats: MM:SS, H:MM:SS, M:SS, etc.
+        const parts = cleanTime.split(':');
+        let totalSeconds = 0;
+
+        if (parts.length === 2) {
+            // MM:SS format
+            const minutes = parseInt(parts[0]) || 0;
+            const seconds = parseInt(parts[1]) || 0;
+            totalSeconds = minutes * 60 + seconds;
+        } else if (parts.length === 3) {
+            // H:MM:SS format
+            const hours = parseInt(parts[0]) || 0;
+            const minutes = parseInt(parts[1]) || 0;
+            const seconds = parseInt(parts[2]) || 0;
+            totalSeconds = hours * 3600 + minutes * 60 + seconds;
+        } else if (parts.length === 1) {
+            // Just seconds
+            totalSeconds = parseInt(parts[0]) || 0;
+        }
+
+        return totalSeconds > 0 ? totalSeconds : null;
+    };
+
+    myFunctions.getClockTimes = function() {
+        try {
+            console.log('Clock Sync: Attempting to detect clocks...');
+
+            // Try multiple possible selectors for chess.com clocks
+            const clockSelectors = [
+                '.clock-time-monospace[role="timer"]',
+                '.clock-time-monospace',
+                '.clock-component .clock-time-monospace',
+                '#board-layout-player-top .clock-time-monospace',
+                '#board-layout-player-bottom .clock-time-monospace'
+            ];
+
+            let allClockElements = [];
+
+            // Try each selector to find clock elements
+            for (const selector of clockSelectors) {
+                const elements = document.querySelectorAll(selector);
+                if (elements.length > 0) {
+                    console.log(`Clock Sync: Found ${elements.length} clock elements with selector: ${selector}`);
+                    allClockElements = Array.from(elements);
+                    break;
+                }
+            }
+
+            if (allClockElements.length === 0) {
+                console.log('Clock Sync: No clock elements found with any selector');
+                return {
+                    opponentTime: null,
+                    playerTime: null,
+                    found: false
+                };
+            }
+
+            // Log all found clock elements for debugging
+            allClockElements.forEach((element, index) => {
+                const timeText = element.textContent || element.innerText;
+                const parentInfo = element.closest('.player-component, .clock-component, [class*="player"], [class*="clock"]');
+                const parentClass = parentInfo ? parentInfo.className : 'no parent found';
+                console.log(`Clock Sync: Clock ${index}: "${timeText}" (parent: ${parentClass})`);
+            });
+
+            let opponentTime = null;
+            let playerTime = null;
+
+            if (allClockElements.length >= 2) {
+                // Assume first clock is opponent (top), second is player (bottom)
+                const opponentTimeText = allClockElements[0].textContent || allClockElements[0].innerText;
+                const playerTimeText = allClockElements[1].textContent || allClockElements[1].innerText;
+
+                console.log(`Clock Sync: Raw opponent time: "${opponentTimeText}"`);
+                console.log(`Clock Sync: Raw player time: "${playerTimeText}"`);
+
+                opponentTime = myFunctions.parseTimeString(opponentTimeText);
+                playerTime = myFunctions.parseTimeString(playerTimeText);
+
+                console.log(`Clock Sync: Parsed opponent time: ${opponentTime}s`);
+                console.log(`Clock Sync: Parsed player time: ${playerTime}s`);
+            } else if (allClockElements.length === 1) {
+                // Only one clock found - could be either player
+                const timeText = allClockElements[0].textContent || allClockElements[0].innerText;
+                console.log(`Clock Sync: Only one clock found: "${timeText}"`);
+
+                // Try to determine which player's clock this is based on parent elements
+                const parentElement = allClockElements[0].closest('.player-component, [class*="player"], [class*="top"], [class*="bottom"]');
+                if (parentElement) {
+                    const parentClass = parentElement.className.toLowerCase();
+                    console.log(`Clock Sync: Clock parent class: ${parentClass}`);
+
+                    if (parentClass.includes('top') || parentClass.includes('opponent')) {
+                        opponentTime = myFunctions.parseTimeString(timeText);
+                        console.log(`Clock Sync: Identified as opponent clock: ${opponentTime}s`);
+                    } else if (parentClass.includes('bottom') || parentClass.includes('player')) {
+                        playerTime = myFunctions.parseTimeString(timeText);
+                        console.log(`Clock Sync: Identified as player clock: ${playerTime}s`);
+                    }
+                }
+            }
+
+            const result = {
+                opponentTime: opponentTime,
+                playerTime: playerTime,
+                found: opponentTime !== null || playerTime !== null
+            };
+
+            console.log('Clock Sync: Final result:', result);
+            return result;
+
+        } catch (error) {
+            console.log('Clock Sync: Detection error:', error);
+            return {
+                opponentTime: null,
+                playerTime: null,
+                found: false
+            };
+        }
+    };
+
+    myFunctions.calculateClockSyncDelay = function() {
+        console.log('Clock Sync: calculateClockSyncDelay called');
+        console.log('Clock Sync: clockSync enabled:', myVars.clockSync);
+        console.log('Clock Sync: exactMatch mode:', myVars.clockSyncExactMatch);
+        console.log('Clock Sync: timePressure enabled:', myVars.clockSyncTimePressure);
+
+        if (!myVars.clockSync) {
+            console.log('Clock Sync: Feature disabled, returning 0 delay');
+            return 0;
+        }
+
+        console.log('Clock Sync: Getting clock times...');
+        const clockData = myFunctions.getClockTimes();
+
+        if (!clockData.found) {
+            console.log('Clock Sync: No clocks found, using minimal delay');
+            return myVars.clockSyncMinDelay * 1000; // Convert to milliseconds
+        }
+
+        if (clockData.opponentTime === null || clockData.playerTime === null) {
+            console.log('Clock Sync: Incomplete clock data - opponent:', clockData.opponentTime, 'player:', clockData.playerTime);
+            console.log('Clock Sync: Using minimal delay due to incomplete data');
+            return myVars.clockSyncMinDelay * 1000; // Convert to milliseconds
+        }
+
+        const opponentTime = clockData.opponentTime;
+        const playerTime = clockData.playerTime;
+
+        console.log(`Clock Sync: Final comparison - Opponent: ${opponentTime}s, Player: ${playerTime}s`);
+
+        // Store current times for reference
+        myVars.lastOpponentTime = opponentTime;
+        myVars.lastPlayerTime = playerTime;
+
+        // Check for time pressure conditions
+        const timePressureThreshold = myVars.clockSyncTimePressureThreshold;
+        const opponentInTimePressure = opponentTime <= timePressureThreshold;
+        const playerInTimePressure = playerTime <= timePressureThreshold;
+        const anyPlayerInTimePressure = opponentInTimePressure || playerInTimePressure;
+
+        console.log(`Clock Sync: Time pressure check - Threshold: ${timePressureThreshold}s`);
+        console.log(`Clock Sync: Opponent in time pressure: ${opponentInTimePressure} (${opponentTime}s)`);
+        console.log(`Clock Sync: Player in time pressure: ${playerInTimePressure} (${playerTime}s)`);
+
+        // Update time pressure status and provide feedback
+        const wasTimePressureActive = myVars.clockSyncTimePressureActive;
+        myVars.clockSyncTimePressureActive = anyPlayerInTimePressure && myVars.clockSyncTimePressure;
+
+        if (myVars.clockSyncTimePressureActive && !wasTimePressureActive) {
+            console.log('🚨 Clock Sync: TIME PRESSURE MODE ACTIVATED - Switching to minimum delay');
+        } else if (!myVars.clockSyncTimePressureActive && wasTimePressureActive) {
+            console.log('✅ Clock Sync: Time pressure mode deactivated - Resuming normal timing');
+        }
+
+        // Time pressure override - use minimum delay when enabled and triggered
+        if (myVars.clockSyncTimePressure && anyPlayerInTimePressure) {
+            const emergencyDelay = Math.random() * 0.4 + 0.1; // Random between 0.1-0.5s
+            console.log(`Clock Sync: ⚡ TIME PRESSURE OVERRIDE - Using emergency delay: ${emergencyDelay.toFixed(2)}s`);
+            return emergencyDelay * 1000; // Convert to milliseconds
+        }
+
+        let delay = 0;
+
+        if (myVars.clockSyncExactMatch) {
+            // Exact Match Mode: Calculate precise delay to match opponent's time
+            console.log('Clock Sync: Using Exact Match mode');
+
+            const timeDifference = playerTime - opponentTime;
+            const calculationTime = myVars.clockSyncCalculationTime;
+
+            console.log(`Clock Sync: Time difference: ${timeDifference}s (player - opponent)`);
+            console.log(`Clock Sync: Estimated calculation time: ${calculationTime}s`);
+
+            if (timeDifference <= 0) {
+                // Opponent has equal or more time - use minimal delay to avoid going below
+                delay = Math.random() * 0.4 + 0.1; // Random between 0.1-0.5s
+                console.log(`Clock Sync: Opponent has equal/more time, using minimal delay: ${delay.toFixed(2)}s`);
+            } else {
+                // Player has more time - calculate exact delay to match opponent
+                // Target: after delay, both players should have approximately equal time
+                // Formula: delay = timeDifference - calculationTime
+                delay = Math.max(0.1, timeDifference - calculationTime);
+
+                // Calculate what the times will be after the delay
+                const projectedPlayerTime = playerTime - delay - calculationTime;
+                const projectedOpponentTime = opponentTime; // Opponent's time doesn't change during our move
+
+                console.log(`Clock Sync: Calculated exact delay: ${delay.toFixed(2)}s`);
+                console.log(`Clock Sync: Projected times after move - Player: ${projectedPlayerTime.toFixed(1)}s, Opponent: ${projectedOpponentTime.toFixed(1)}s`);
+                console.log(`Clock Sync: Projected difference: ${(projectedPlayerTime - projectedOpponentTime).toFixed(1)}s`);
+
+                // Fallback check: if delay would be too large (>30s), cap it
+                const maxReasonableDelay = 30;
+                if (delay > maxReasonableDelay) {
+                    console.log(`Clock Sync: Delay too large (${delay.toFixed(1)}s), capping at ${maxReasonableDelay}s`);
+                    delay = maxReasonableDelay;
+                }
+
+                // Ensure minimum delay for natural feel
+                delay = Math.max(0.1, delay);
+            }
+
+        } else {
+            // Standard Range Mode: Use configurable delay ranges
+            console.log('Clock Sync: Using Standard Range mode');
+
+            if (opponentTime > playerTime) {
+                // Opponent has more time - move quickly
+                delay = myVars.clockSyncMinDelay;
+                console.log(`Clock Sync: Opponent has more time (${opponentTime}s vs ${playerTime}s), moving quickly with ${delay}s delay`);
+            } else if (opponentTime < playerTime) {
+                // Player has more time - add delay to match opponent's pace
+                const timeDifference = playerTime - opponentTime;
+
+                // Calculate delay based on time difference
+                // More time difference = longer delay (up to max)
+                const delayFactor = Math.min(timeDifference / 60, 1); // Normalize to 1 minute difference
+                delay = myVars.clockSyncMinDelay + (delayFactor * (myVars.clockSyncMaxDelay - myVars.clockSyncMinDelay));
+
+                console.log(`Clock Sync: Player has ${timeDifference}s more time, delay factor: ${delayFactor.toFixed(2)}, calculated delay: ${delay.toFixed(1)}s`);
+            } else {
+                // Times are equal - use moderate delay
+                delay = (myVars.clockSyncMinDelay + myVars.clockSyncMaxDelay) / 2;
+                console.log(`Clock Sync: Times are equal (${opponentTime}s), using moderate delay: ${delay}s`);
+            }
+
+            // Ensure delay is within bounds for standard mode
+            const originalDelay = delay;
+            delay = Math.max(myVars.clockSyncMinDelay, Math.min(myVars.clockSyncMaxDelay, delay));
+
+            if (originalDelay !== delay) {
+                console.log(`Clock Sync: Delay clamped from ${originalDelay.toFixed(1)}s to ${delay.toFixed(1)}s (bounds: ${myVars.clockSyncMinDelay}s - ${myVars.clockSyncMaxDelay}s)`);
+            }
+        }
+
+        const delayMs = delay * 1000;
+        console.log(`Clock Sync: Final delay: ${delay.toFixed(2)}s (${delayMs}ms)`);
+
+        return delayMs; // Convert to milliseconds
+    };
 
     // Function to download the Python server using GM.download with fallback
     myFunctions.downloadServer = function() {
@@ -344,12 +625,27 @@ function main() {
         }
 
         if(myVars.autoMove == true){
-            myFunctions.movePiece(res1, res2);
+            // Calculate delay based on clock synchronization if enabled
+            const clockSyncDelay = myFunctions.calculateClockSyncDelay();
 
-            // After auto move, we need to reset canGo to allow auto run on next turn
-            setTimeout(() => {
-                canGo = true;
-            }, 500);
+            if (clockSyncDelay > 0) {
+                console.log(`Auto move: Applying clock sync delay of ${clockSyncDelay/1000}s`);
+                setTimeout(() => {
+                    myFunctions.movePiece(res1, res2);
+
+                    // After auto move, we need to reset canGo to allow auto run on next turn
+                    setTimeout(() => {
+                        canGo = true;
+                    }, 500);
+                }, clockSyncDelay);
+            } else {
+                myFunctions.movePiece(res1, res2);
+
+                // After auto move, we need to reset canGo to allow auto run on next turn
+                setTimeout(() => {
+                    canGo = true;
+                }, 500);
+            }
         }
         isThinking = false;
 
@@ -3605,6 +3901,66 @@ function main() {
                         <div style="font-size: 12px; color: #666; margin-bottom: 10px;">
                             Automatically plays the best move for you
                         </div>
+
+                        <!-- Clock Synchronization Sub-section -->
+                        <div id="clockSyncSection" style="margin-top: 15px; padding: 10px; background-color: #f8f8f8; border-radius: 6px; border: 1px solid #e0e0e0;">
+                            <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                                <label for="clockSync" style="margin-right: 10px; font-weight: bold; color: #4CAF50; font-size: 13px;">Clock Sync:</label>
+                                <label class="switch" style="transform: scale(0.8);">
+                                    <input type="checkbox" id="clockSync" name="clockSync" value="false">
+                                    <span class="slider" style="background-color: #ccc;"></span>
+                                </label>
+                                <span id="clockSyncStatus" style="margin-left: 8px; font-size: 11px; color: #666;">Off</span>
+                            </div>
+                            <div style="font-size: 11px; color: #666; margin-bottom: 8px;">
+                                Matches opponent's time usage patterns when auto move is enabled
+                            </div>
+
+                            <!-- Exact Match Toggle -->
+                            <div style="display: flex; align-items: center; margin-bottom: 8px; padding: 6px; background-color: #fff; border-radius: 4px; border: 1px solid #ddd;">
+                                <label for="clockSyncExactMatch" style="margin-right: 8px; font-weight: bold; color: #2196F3; font-size: 12px;">Exact Match:</label>
+                                <label class="switch" style="transform: scale(0.7);">
+                                    <input type="checkbox" id="clockSyncExactMatch" name="clockSyncExactMatch" value="false">
+                                    <span class="slider" style="background-color: #ccc;"></span>
+                                </label>
+                                <span id="clockSyncExactMatchStatus" style="margin-left: 6px; font-size: 10px; color: #666;">Off</span>
+                            </div>
+                            <div id="exactMatchDescription" style="font-size: 10px; color: #666; margin-bottom: 8px; font-style: italic;">
+                                Precisely matches opponent's remaining time instead of using delay ranges
+                            </div>
+
+                            <!-- Time Pressure Override -->
+                            <div style="display: flex; align-items: center; margin-bottom: 8px; padding: 6px; background-color: #fff3cd; border-radius: 4px; border: 1px solid #ffeaa7;">
+                                <label for="clockSyncTimePressure" style="margin-right: 8px; font-weight: bold; color: #856404; font-size: 12px;">Time Pressure:</label>
+                                <label class="switch" style="transform: scale(0.7);">
+                                    <input type="checkbox" id="clockSyncTimePressure" name="clockSyncTimePressure" value="true" checked>
+                                    <span class="slider" style="background-color: #ccc;"></span>
+                                </label>
+                                <span id="clockSyncTimePressureStatus" style="margin-left: 6px; font-size: 10px; color: #856404;">On</span>
+                                <div style="flex: 1; margin-left: 10px;">
+                                    <label for="clockSyncTimePressureThreshold" style="display: block; font-size: 10px; margin-bottom: 2px; color: #856404;">Threshold (s):</label>
+                                    <input type="number" id="clockSyncTimePressureThreshold" name="clockSyncTimePressureThreshold" min="5" max="120" step="5" value="20" style="width: 60px; padding: 2px; border-radius: 3px; border: 1px solid #ddd; font-size: 10px;">
+                                </div>
+                            </div>
+                            <div style="font-size: 10px; color: #856404; margin-bottom: 8px; font-style: italic;">
+                                Automatically uses minimum delay when either player has ≤ threshold seconds remaining
+                            </div>
+
+                            <!-- Delay Range Controls (hidden in exact match mode) -->
+                            <div id="delayRangeControls" style="display: flex; align-items: center; gap: 8px; margin-top: 8px;">
+                                <div style="flex: 1;">
+                                    <label for="clockSyncMinDelay" style="display: block; font-size: 10px; margin-bottom: 2px; color: #666;">Min Delay (s):</label>
+                                    <input type="number" id="clockSyncMinDelay" name="clockSyncMinDelay" min="0.1" max="30" step="0.1" value="0.5" style="width: 100%; padding: 4px; border-radius: 3px; border: 1px solid #ddd; font-size: 11px;">
+                                </div>
+                                <div style="flex: 1;">
+                                    <label for="clockSyncMaxDelay" style="display: block; font-size: 10px; margin-bottom: 2px; color: #666;">Max Delay (s):</label>
+                                    <input type="number" id="clockSyncMaxDelay" name="clockSyncMaxDelay" min="0.5" max="60" step="0.5" value="10" style="width: 100%; padding: 4px; border-radius: 3px; border: 1px solid #ddd; font-size: 11px;">
+                                </div>
+                            </div>
+                            <div id="delayRangeDescription" style="font-size: 10px; color: #666; margin-top: 6px; font-style: italic;">
+                                Delays moves when you have more time than opponent to appear more human-like
+                            </div>
+                        </div>
                     </div>
 
                     <div style="margin-bottom: 20px; border-left: 3px solid #9C27B0; padding-left: 12px;">
@@ -3621,7 +3977,7 @@ function main() {
                         </div>
                     </div>
 
-                    <div style="margin-top: 15px; background-color: #f8f8f8; padding: 12px; border-radius: 6px;">
+                    <div id="autoRunDelaySection" style="margin-top: 15px; background-color: #f8f8f8; padding: 12px; border-radius: 6px;">
                         <label style="display: block; margin-bottom: 10px; font-weight: bold;">Auto Run Delay (Seconds):</label>
                         <div style="display: flex; align-items: center; gap: 10px;">
                             <div style="flex: 1;">
@@ -3636,6 +3992,9 @@ function main() {
                         </div>
                         <div style="font-size: 12px; color: #666; margin-top: 8px; font-style: italic;">
                             Random delay between min and max to simulate human thinking time
+                        </div>
+                        <div id="autoRunDelayNote" style="display: none; font-size: 11px; color: #856404; margin-top: 8px; padding: 6px; background-color: #fff3cd; border-radius: 4px; border: 1px solid #ffeaa7;">
+                            ⚠️ Clock Sync is managing timing - these delays are not used when Clock Sync is enabled
                         </div>
                     </div>
                 </div>
@@ -4005,25 +4364,7 @@ function main() {
                     header.addEventListener('click', toggleContent);
                 }
 
-                // Handle Auto Move toggle
-                const autoMoveCheckbox = document.getElementById('autoMove');
-                const autoMoveStatus = document.getElementById('autoMoveStatus');
-                if (autoMoveCheckbox && autoMoveStatus) {
-                    autoMoveCheckbox.addEventListener('change', function() {
-                        autoMoveStatus.textContent = this.checked ? 'On' : 'Off';
-                        autoMoveStatus.style.color = this.checked ? '#4CAF50' : '#666';
-                    });
-                }
-
-                // Handle Auto Run toggle
-                const autoRunCheckbox = document.getElementById('autoRun');
-                const autoRunStatus = document.getElementById('autoRunStatus');
-                if (autoRunCheckbox && autoRunStatus) {
-                    autoRunCheckbox.addEventListener('change', function() {
-                        autoRunStatus.textContent = this.checked ? 'On' : 'Off';
-                        autoRunStatus.style.color = this.checked ? '#FF9800' : '#666';
-                    });
-                }
+                // Note: Auto Move and Auto Run toggle event listeners are handled below with jQuery
 
                 // Handle Auto Queue toggle
                 const autoQueueCheckbox = document.getElementById('autoQueue');
@@ -4626,13 +4967,141 @@ function main() {
 
             $('#autoMove').on('change', function() {
                 myVars.autoMove = this.checked;
-                // Visual feedback for auto move toggle
+                myFunctions.updateAutoMoveStatus(this.checked ? 'on' : 'off');
+            });
+
+            // Clock synchronization event handlers
+            $('#clockSync').on('change', function() {
+                myVars.clockSync = this.checked;
+                console.log('Clock sync toggled:', this.checked);
+
+                // Update status indicator
+                const statusElement = $('#clockSyncStatus');
                 if (this.checked) {
-                    $(this).parent().append('<span id="autoMoveStatus" style="margin-left: 10px; font-size: 12px; color: #4CAF50;">On</span>');
+                    statusElement.text('On').css('color', '#4CAF50');
                 } else {
-                    $('#autoMoveStatus').remove();
+                    statusElement.text('Off').css('color', '#666');
+                }
+
+                // Update Auto Run Delay section visibility
+                updateAutoRunDelayVisibility();
+            });
+
+            // Function to update delay controls visibility
+            function updateDelayControlsVisibility() {
+                const exactMatchEnabled = $('#clockSyncExactMatch').prop('checked');
+                const delayControls = $('#delayRangeControls');
+                const delayDescription = $('#delayRangeDescription');
+                const exactDescription = $('#exactMatchDescription');
+
+                if (exactMatchEnabled) {
+                    delayControls.hide();
+                    delayDescription.hide();
+                    exactDescription.text('Precisely calculates delay to match opponent\'s remaining time after the move');
+                } else {
+                    delayControls.show();
+                    delayDescription.show();
+                    exactDescription.text('Precisely matches opponent\'s remaining time instead of using delay ranges');
+                }
+            }
+
+            // Function to update Auto Run Delay section visibility
+            function updateAutoRunDelayVisibility() {
+                const clockSyncEnabled = $('#clockSync').prop('checked');
+                const autoRunDelaySection = $('#autoRunDelaySection');
+                const autoRunDelayNote = $('#autoRunDelayNote');
+
+                if (clockSyncEnabled) {
+                    // Show warning note when clock sync is enabled
+                    autoRunDelayNote.show();
+                    // Optionally dim the controls to show they're not active
+                    autoRunDelaySection.css('opacity', '0.6');
+                } else {
+                    // Hide warning note when clock sync is disabled
+                    autoRunDelayNote.hide();
+                    // Restore full opacity
+                    autoRunDelaySection.css('opacity', '1');
+                }
+            }
+
+            $('#clockSyncExactMatch').on('change', function() {
+                myVars.clockSyncExactMatch = this.checked;
+                console.log('Clock sync exact match toggled:', this.checked);
+
+                // Update status indicator
+                const statusElement = $('#clockSyncExactMatchStatus');
+                if (this.checked) {
+                    statusElement.text('On').css('color', '#2196F3');
+                } else {
+                    statusElement.text('Off').css('color', '#666');
+                }
+
+                // Update visibility of delay controls
+                updateDelayControlsVisibility();
+            });
+
+            $('#clockSyncMinDelay').on('change', function() {
+                const value = parseFloat(this.value);
+                if (value >= 0.1 && value <= 30) {
+                    myVars.clockSyncMinDelay = value;
+                    console.log('Clock sync min delay updated:', value);
+
+                    // Ensure min is not greater than max
+                    const maxDelay = parseFloat($('#clockSyncMaxDelay').val());
+                    if (value > maxDelay) {
+                        $('#clockSyncMaxDelay').val(value);
+                        myVars.clockSyncMaxDelay = value;
+                    }
                 }
             });
+
+            $('#clockSyncMaxDelay').on('change', function() {
+                const value = parseFloat(this.value);
+                if (value >= 0.5 && value <= 60) {
+                    myVars.clockSyncMaxDelay = value;
+                    console.log('Clock sync max delay updated:', value);
+
+                    // Ensure max is not less than min
+                    const minDelay = parseFloat($('#clockSyncMinDelay').val());
+                    if (value < minDelay) {
+                        $('#clockSyncMinDelay').val(value);
+                        myVars.clockSyncMinDelay = value;
+                    }
+                }
+            });
+
+            // Time pressure event handlers
+            $('#clockSyncTimePressure').on('change', function() {
+                myVars.clockSyncTimePressure = this.checked;
+                console.log('Clock sync time pressure toggled:', this.checked);
+
+                // Update status indicator
+                const statusElement = $('#clockSyncTimePressureStatus');
+                if (this.checked) {
+                    statusElement.text('On').css('color', '#856404');
+                } else {
+                    statusElement.text('Off').css('color', '#666');
+                }
+
+                // Reset time pressure active state when disabled
+                if (!this.checked) {
+                    myVars.clockSyncTimePressureActive = false;
+                }
+            });
+
+            $('#clockSyncTimePressureThreshold').on('change', function() {
+                const value = parseInt(this.value);
+                if (value >= 5 && value <= 120) {
+                    myVars.clockSyncTimePressureThreshold = value;
+                    console.log('Clock sync time pressure threshold updated:', value);
+                }
+            });
+
+            // Initialize delay controls visibility
+            setTimeout(updateDelayControlsVisibility, 100);
+
+            // Initialize Auto Run Delay visibility
+            setTimeout(updateAutoRunDelayVisibility, 100);
 
             $('#showArrows').on('change', function() {
                 myVars.showArrows = this.checked;
@@ -4940,9 +5409,17 @@ function main() {
             $('#showArrows').attr('title', 'Display arrows showing the best moves on the board');
             $('#persistentHighlights').attr('title', 'Keep move highlights visible until the next move is made');
             $('#autoRun').attr('title', 'Automatically run the engine after each move');
-            $('#autoMove').attr('title', 'Automatically make the best move for your side');
+            $('#autoMove').attr('title', 'Automatically make the best move for your side. Enable Clock Sync below for human-like timing.');
             $('#timeDelayMin').attr('title', 'Minimum delay before auto-running the engine');
             $('#timeDelayMax').attr('title', 'Maximum delay before auto-running the engine');
+
+            // Clock sync tooltips
+            $('#clockSync').attr('title', 'Synchronize move timing with opponent\'s clock usage to appear more human-like');
+            $('#clockSyncExactMatch').attr('title', 'Precisely calculate delays to match opponent\'s remaining time instead of using delay ranges');
+            $('#clockSyncMinDelay').attr('title', 'Minimum delay when moving quickly (opponent has more time)');
+            $('#clockSyncMaxDelay').attr('title', 'Maximum delay when slowing down (you have more time)');
+            $('#clockSyncTimePressure').attr('title', 'Override all delays with minimum timing when either player enters time trouble');
+            $('#clockSyncTimePressureThreshold').attr('title', 'Time threshold in seconds - when either player has this much time or less, use emergency timing');
 
             // Close modals when clicking outside
             $('.modal-container').on('click', function(event) {
@@ -5022,6 +5499,14 @@ function main() {
             if($('#autoRun')[0]) myVars.autoRun = $('#autoRun')[0].checked;
             if($('#autoMove')[0]) myVars.autoMove = $('#autoMove')[0].checked;
             if($('#showArrows')[0]) myVars.showArrows = $('#showArrows')[0].checked;
+
+            // Update clock sync settings
+            if($('#clockSync')[0]) myVars.clockSync = $('#clockSync')[0].checked;
+            if($('#clockSyncExactMatch')[0]) myVars.clockSyncExactMatch = $('#clockSyncExactMatch')[0].checked;
+            if($('#clockSyncMinDelay')[0]) myVars.clockSyncMinDelay = parseFloat($('#clockSyncMinDelay')[0].value) || 0.5;
+            if($('#clockSyncMaxDelay')[0]) myVars.clockSyncMaxDelay = parseFloat($('#clockSyncMaxDelay')[0].value) || 10;
+            if($('#clockSyncTimePressure')[0]) myVars.clockSyncTimePressure = $('#clockSyncTimePressure')[0].checked;
+            if($('#clockSyncTimePressureThreshold')[0]) myVars.clockSyncTimePressureThreshold = parseInt($('#clockSyncTimePressureThreshold')[0].value) || 20;
 
             // Update move indicator type if radio buttons exist
             if($('input[name="moveIndicatorType"]:checked')[0]) {
@@ -5788,6 +6273,13 @@ function main() {
             autoQueue: $('#autoQueue')[0].checked,
             timeDelayMin: parseFloat($('#timeDelayMin')[0].value),
             timeDelayMax: parseFloat($('#timeDelayMax')[0].value),
+            // Clock synchronization settings
+            clockSync: $('#clockSync')[0] ? $('#clockSync')[0].checked : false,
+            clockSyncMinDelay: $('#clockSyncMinDelay')[0] ? parseFloat($('#clockSyncMinDelay')[0].value) : 0.5,
+            clockSyncMaxDelay: $('#clockSyncMaxDelay')[0] ? parseFloat($('#clockSyncMaxDelay')[0].value) : 10,
+            clockSyncExactMatch: $('#clockSyncExactMatch')[0] ? $('#clockSyncExactMatch')[0].checked : false,
+            clockSyncTimePressure: $('#clockSyncTimePressure')[0] ? $('#clockSyncTimePressure')[0].checked : true,
+            clockSyncTimePressureThreshold: $('#clockSyncTimePressureThreshold')[0] ? parseInt($('#clockSyncTimePressureThreshold')[0].value) : 20,
             evalBarTheme: $('#evalBarColor').val(),
             whiteAdvantageColor: $('#whiteAdvantageColor').val(),
             blackAdvantageColor: $('#blackAdvantageColor').val(),
@@ -5877,6 +6369,13 @@ function main() {
                 myVars.autoMove = settings.autoMove !== undefined ? settings.autoMove : false;
                 myVars.autoQueue = settings.autoQueue !== undefined ? settings.autoQueue : false;
                 myVars.fusionMode = settings.fusionMode !== undefined ? settings.fusionMode : false;
+                // Clock synchronization settings
+                myVars.clockSync = settings.clockSync !== undefined ? settings.clockSync : false;
+                myVars.clockSyncMinDelay = settings.clockSyncMinDelay !== undefined ? settings.clockSyncMinDelay : 0.5;
+                myVars.clockSyncMaxDelay = settings.clockSyncMaxDelay !== undefined ? settings.clockSyncMaxDelay : 10;
+                myVars.clockSyncExactMatch = settings.clockSyncExactMatch !== undefined ? settings.clockSyncExactMatch : false;
+                myVars.clockSyncTimePressure = settings.clockSyncTimePressure !== undefined ? settings.clockSyncTimePressure : true;
+                myVars.clockSyncTimePressureThreshold = settings.clockSyncTimePressureThreshold !== undefined ? settings.clockSyncTimePressureThreshold : 20;
                 myVars.whiteAdvantageColor = settings.whiteAdvantageColor || '#4CAF50';
                 myVars.blackAdvantageColor = settings.blackAdvantageColor || '#F44336';
                 myVars.arrowColor = settings.arrowColor || '#0077CC';
@@ -5933,6 +6432,74 @@ function main() {
                 if ($('#autoRun')[0]) {
                     $('#autoRun')[0].checked = myVars.autoRun;
                 }
+
+                // Apply clock synchronization settings
+                if ($('#clockSync')[0]) {
+                    $('#clockSync')[0].checked = myVars.clockSync;
+                    // Update status indicator
+                    const statusElement = $('#clockSyncStatus');
+                    if (myVars.clockSync) {
+                        statusElement.text('On').css('color', '#4CAF50');
+                    } else {
+                        statusElement.text('Off').css('color', '#666');
+                    }
+                }
+
+                if ($('#clockSyncExactMatch')[0]) {
+                    $('#clockSyncExactMatch')[0].checked = myVars.clockSyncExactMatch;
+                    // Update status indicator
+                    const exactStatusElement = $('#clockSyncExactMatchStatus');
+                    if (myVars.clockSyncExactMatch) {
+                        exactStatusElement.text('On').css('color', '#2196F3');
+                    } else {
+                        exactStatusElement.text('Off').css('color', '#666');
+                    }
+
+                    // Update delay controls visibility
+                    setTimeout(() => {
+                        const delayControls = $('#delayRangeControls');
+                        const delayDescription = $('#delayRangeDescription');
+                        const exactDescription = $('#exactMatchDescription');
+
+                        if (myVars.clockSyncExactMatch) {
+                            delayControls.hide();
+                            delayDescription.hide();
+                            exactDescription.text('Precisely calculates delay to match opponent\'s remaining time after the move');
+                        } else {
+                            delayControls.show();
+                            delayDescription.show();
+                            exactDescription.text('Precisely matches opponent\'s remaining time instead of using delay ranges');
+                        }
+                    }, 100);
+                }
+
+                if ($('#clockSyncMinDelay')[0]) {
+                    $('#clockSyncMinDelay')[0].value = myVars.clockSyncMinDelay;
+                }
+
+                if ($('#clockSyncMaxDelay')[0]) {
+                    $('#clockSyncMaxDelay')[0].value = myVars.clockSyncMaxDelay;
+                }
+
+                if ($('#clockSyncTimePressure')[0]) {
+                    $('#clockSyncTimePressure')[0].checked = myVars.clockSyncTimePressure;
+                    // Update status indicator
+                    const timePressureStatusElement = $('#clockSyncTimePressureStatus');
+                    if (myVars.clockSyncTimePressure) {
+                        timePressureStatusElement.text('On').css('color', '#856404');
+                    } else {
+                        timePressureStatusElement.text('Off').css('color', '#666');
+                    }
+                }
+
+                if ($('#clockSyncTimePressureThreshold')[0]) {
+                    $('#clockSyncTimePressureThreshold')[0].value = myVars.clockSyncTimePressureThreshold;
+                }
+
+                // Initialize Auto Run Delay visibility after settings are loaded
+                setTimeout(() => {
+                    updateAutoRunDelayVisibility();
+                }, 200);
 
                 if ($('#autoQueue')[0]) {
                     $('#autoQueue')[0].checked = myVars.autoQueue;
@@ -6124,6 +6691,20 @@ function main() {
                     myFunctions.updateHumanMode(true);
                     $('#eloSlider').prop('disabled', true);
                 }
+
+                // Initialize auto run status after settings are loaded
+                if (myVars.autoRun) {
+                    myFunctions.updateAutoRunStatus('on');
+                } else {
+                    myFunctions.updateAutoRunStatus('off');
+                }
+
+                // Initialize auto move status after settings are loaded
+                if (myVars.autoMove) {
+                    myFunctions.updateAutoMoveStatus('on');
+                } else {
+                    myFunctions.updateAutoMoveStatus('off');
+                }
             } else {
                 // Fallback to old method for backward compatibility
                 const savedDepth = await GM.getValue('depth', 11);
@@ -6228,6 +6809,20 @@ function main() {
                 if (myVars.humanMode && myVars.humanMode.active) {
                     myFunctions.updateHumanMode(true);
                     $('#eloSlider').prop('disabled', true);
+                }
+
+                // Initialize auto run status after settings are loaded (legacy format)
+                if (myVars.autoRun) {
+                    myFunctions.updateAutoRunStatus('on');
+                } else {
+                    myFunctions.updateAutoRunStatus('off');
+                }
+
+                // Initialize auto move status after settings are loaded (legacy format)
+                if (myVars.autoMove) {
+                    myFunctions.updateAutoMoveStatus('on');
+                } else {
+                    myFunctions.updateAutoMoveStatus('off');
                 }
 
                 // After loading the settings from individual values, save them as a combined object
@@ -6490,6 +7085,22 @@ function main() {
             case 'running':
                 $('#autoRunStatus').text('Running...');
                 $('#autoRunStatus').css('color', '#2196F3');
+                break;
+        }
+    };
+
+    // Function to update the auto move status indicator
+    myFunctions.updateAutoMoveStatus = function(status) {
+        if (!$('#autoMoveStatus')[0]) return;
+
+        switch(status) {
+            case 'on':
+                $('#autoMoveStatus').text('On');
+                $('#autoMoveStatus').css('color', '#4CAF50');
+                break;
+            case 'off':
+                $('#autoMoveStatus').text('Off');
+                $('#autoMoveStatus').css('color', '#666');
                 break;
         }
     };
