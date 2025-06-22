@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Chess AI
 // @namespace    github.com/longkidkoolstar
-// @version      4.0.1
+// @version      4.0.2
 // @description  Chess.com Bot/Cheat that finds the best move with evaluation bar and ELO control!
 // @author       longkidkoolstar
 // @license      none
@@ -20,7 +20,7 @@
 // ==/UserScript==
 
 
-const currentVersion = '4.0.1'; // Updated version number
+const currentVersion = '4.0.2'; // Updated version number
 
 function main() {
 
@@ -1907,8 +1907,23 @@ function main() {
 
         if(e.data.includes('bestmove')){
             const bestMove = e.data.split(' ')[1];
-            console.log('Best move:', bestMove);
-            console.log('Top moves before reset:', myVars.topMoves ? myVars.topMoves.length : 0);
+            console.log('[ENGINE DEBUG] Best move received:', bestMove);
+            console.log('[ENGINE DEBUG] Top moves before reset:', myVars.topMoves ? myVars.topMoves.length : 0);
+
+            // Validate that it's still the player's turn before processing the move
+            const currentGameTurn = board.game.getTurn();
+            const playingAs = board.game.getPlayingAs();
+            const isPlayerTurn = currentGameTurn == playingAs;
+
+            console.log(`[ENGINE DEBUG] Turn validation - currentGameTurn: ${currentGameTurn}, playingAs: ${playingAs}, isPlayerTurn: ${isPlayerTurn}`);
+            console.log(`[ENGINE DEBUG] myTurn: ${myTurn}, isThinking: ${isThinking}`);
+
+            if (!isPlayerTurn) {
+                console.warn('[ENGINE DEBUG] WARNING: Received bestmove but it\'s not player\'s turn! Ignoring move.');
+                isThinking = false;
+                myVars.engineRunning = false;
+                return;
+            }
 
             // Store the best move for server updates
             myVars.bestMove = bestMove;
@@ -2815,13 +2830,22 @@ function main() {
     }
 
     myFunctions.autoRun = function(lstValue){
+        // Double-check turn state to prevent race conditions
+        const currentGameTurn = board.game.getTurn();
+        const playingAs = board.game.getPlayingAs();
+        const isPlayerTurn = currentGameTurn == playingAs;
+
+        console.log(`[AUTO RUN DEBUG] autoRun called with depth ${lstValue}`);
+        console.log(`[AUTO RUN DEBUG] currentGameTurn: ${currentGameTurn}, playingAs: ${playingAs}, isPlayerTurn: ${isPlayerTurn}`);
+        console.log(`[AUTO RUN DEBUG] myTurn: ${myTurn}, isThinking: ${isThinking}`);
+
         // Only run if it's the player's turn and not already thinking
-        if(board.game.getTurn() == board.game.getPlayingAs() && !isThinking){
-            console.log(`Auto running engine at depth ${lstValue}`);
+        if(isPlayerTurn && !isThinking){
+            console.log(`[AUTO RUN DEBUG] Conditions met, starting engine at depth ${lstValue}`);
             myFunctions.updateAutoRunStatus('running');
             myFunctions.runChessEngine(lstValue);
         } else {
-            console.log("Auto run skipped - not player's turn or engine is already thinking");
+            console.log(`[AUTO RUN DEBUG] Auto run skipped - isPlayerTurn: ${isPlayerTurn}, isThinking: ${isThinking}`);
             if (myVars.autoRun) {
                 myFunctions.updateAutoRunStatus('waiting');
             }
@@ -5459,16 +5483,28 @@ function main() {
 
 
     function other(delay){
-        console.log(`Scheduling next auto run in ${delay/1000} seconds`);
+        console.log(`[AUTO RUN DEBUG] Scheduling next auto run in ${delay/1000} seconds`);
+        console.log(`[AUTO RUN DEBUG] Current state - myTurn: ${myTurn}, autoRun: ${myVars.autoRun}, canGo: ${canGo}, isThinking: ${isThinking}`);
         myFunctions.updateAutoRunStatus('waiting');
 
         // Use setTimeout instead of setInterval with constant checking
         setTimeout(() => {
+            console.log(`[AUTO RUN DEBUG] Timer fired - checking conditions`);
+            console.log(`[AUTO RUN DEBUG] myVars.autoRun: ${myVars.autoRun}, myTurn: ${myTurn}, isThinking: ${isThinking}`);
+
             // Only proceed if auto run is still enabled
             if(myVars.autoRun && myTurn && !isThinking) {
+                console.log(`[AUTO RUN DEBUG] Conditions met, running auto run`);
                 myFunctions.autoRun(lastValue);
-            }
+                // Only reset canGo after successful auto run
+                setTimeout(() => {
+                    canGo = true;
+                    console.log(`[AUTO RUN DEBUG] canGo reset to true after auto run`);
+                }, 100);
+            } else {
+                console.log(`[AUTO RUN DEBUG] Conditions not met, resetting canGo`);
                 canGo = true;
+            }
         }, delay);
     }
 
@@ -5531,6 +5567,15 @@ function main() {
             // Check if turn has changed
             const currentTurn = board.game.getTurn() == board.game.getPlayingAs();
             const turnChanged = currentTurn !== myTurn;
+
+            // Enhanced debugging for turn detection
+            if (turnChanged) {
+                console.log(`[TURN DEBUG] Turn changed: ${myTurn} -> ${currentTurn}`);
+                console.log(`[TURN DEBUG] board.game.getTurn(): ${board.game.getTurn()}`);
+                console.log(`[TURN DEBUG] board.game.getPlayingAs(): ${board.game.getPlayingAs()}`);
+                console.log(`[TURN DEBUG] canGo: ${canGo}, isThinking: ${isThinking}, autoRun: ${myVars.autoRun}`);
+            }
+
             myTurn = currentTurn;
 
             // Only update delay values when needed
@@ -5545,10 +5590,25 @@ function main() {
 
             // If turn has changed to player's turn and auto run is enabled, trigger auto run
             if(turnChanged && myTurn && myVars.autoRun && canGo && !isThinking) {
-                console.log("Turn changed to player's turn, triggering auto run");
+                console.log("[TURN DEBUG] Turn changed to player's turn, triggering auto run");
                 canGo = false;
                 var currentDelay = myVars.delay != undefined ? myVars.delay * 1000 : 10;
                 other(currentDelay);
+            }
+
+            // Recovery mechanism: if it's player's turn but auto run is stuck, reset state
+            if(myTurn && myVars.autoRun && !canGo && !isThinking) {
+                // Check if we've been stuck for too long (more than 10 seconds)
+                const now = Date.now();
+                if (!myVars.lastAutoRunAttempt) {
+                    myVars.lastAutoRunAttempt = now;
+                } else if (now - myVars.lastAutoRunAttempt > 10000) {
+                    console.warn("[TURN DEBUG] Auto run appears stuck, resetting state");
+                    canGo = true;
+                    myVars.lastAutoRunAttempt = now;
+                }
+            } else if (myTurn && myVars.autoRun && canGo) {
+                myVars.lastAutoRunAttempt = Date.now();
             }
 
             // Update evaluation bar position if board size changes
@@ -5949,6 +6009,30 @@ function main() {
             myFunctions.sendServerUpdate();
         }
     };
+
+    // Debug function to monitor turn state
+    myFunctions.debugTurnState = function() {
+        if (!board) return "Board not available";
+
+        const currentGameTurn = board.game.getTurn();
+        const playingAs = board.game.getPlayingAs();
+        const isPlayerTurn = currentGameTurn == playingAs;
+
+        return {
+            timestamp: new Date().toISOString(),
+            currentGameTurn: currentGameTurn,
+            playingAs: playingAs,
+            isPlayerTurn: isPlayerTurn,
+            myTurn: myTurn,
+            canGo: canGo,
+            isThinking: isThinking,
+            autoRun: myVars.autoRun,
+            engineRunning: myVars.engineRunning
+        };
+    };
+
+    // Make debug function available globally
+    window.debugTurnState = myFunctions.debugTurnState;
 
     // Function to stop the engine
     myFunctions.stopEngine = function() {
