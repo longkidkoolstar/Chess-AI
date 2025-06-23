@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Chess AI
 // @namespace    github.com/longkidkoolstar
-// @version      4.0.2
+// @version      4.1.0
 // @description  Chess.com Bot/Cheat that finds the best move with evaluation bar and ELO control!
 // @author       longkidkoolstar
 // @license      none
@@ -20,7 +20,7 @@
 // ==/UserScript==
 
 
-const currentVersion = '4.0.2'; // Updated version number
+const currentVersion = '4.1.0'; // Updated version number
 
 function main() {
 
@@ -1928,6 +1928,9 @@ function main() {
             // Store the best move for server updates
             myVars.bestMove = bestMove;
 
+            // Mark that this move is from the engine, not opening book
+            myVars.lastMoveFromBook = false;
+
             // If human mode is active, simulate human play
             if(myVars.humanMode && myVars.humanMode.active && myVars.alternativeMoves && myVars.alternativeMoves.length > 0) {
                 // Get the alternative moves (excluding the best move)
@@ -2567,6 +2570,10 @@ function main() {
     // Opening book functionality
     myVars.openingBook = null;
     myVars.useOpeningBook = true; // Default to using opening book
+    myVars.selectedOpeningRepertoire = 'mixed'; // Default to mixed repertoire
+    myVars.lastMoveFromBook = false; // Track if last move was from opening book
+    myVars.showOpeningDisplay = true; // Default to showing opening names
+    myVars.openingRepertoires = null; // Will store categorized openings
     
     myFunctions.fetchOpeningBook = async function() {
         try {
@@ -2574,6 +2581,10 @@ function main() {
             const data = await response.json();
             myVars.openingBook = data;
             console.log('Opening book loaded with', Object.keys(data).length, 'positions');
+
+            // Analyze and categorize the openings
+            myFunctions.categorizeOpenings(data);
+
             return data;
         } catch (error) {
             console.error('Failed to fetch opening book:', error);
@@ -2581,45 +2592,202 @@ function main() {
             return null;
         }
     };
+
+    // Function to analyze opening book and categorize openings by first moves
+    myFunctions.categorizeOpenings = function(openingBook) {
+        const repertoires = {
+            kings_pawn: [],
+            queens_pawn: [],
+            english: [],
+            flank: [],
+            other: []
+        };
+
+        // Analyze each opening in the book
+        Object.values(openingBook).forEach(position => {
+            if (!position.name || !position.moves) return;
+
+            const openingName = position.name.toLowerCase();
+            const moves = position.moves.trim();
+
+            // Extract the first move from the moves string
+            const firstMove = myFunctions.extractFirstMove(moves);
+
+            if (firstMove) {
+                // Categorize based on the first move
+                if (firstMove === 'e4') {
+                    repertoires.kings_pawn.push(openingName);
+                } else if (firstMove === 'd4') {
+                    repertoires.queens_pawn.push(openingName);
+                } else if (firstMove === 'c4' || firstMove === 'Nf3') {
+                    repertoires.english.push(openingName);
+                } else if (['g3', 'b3', 'f4', 'Nc3', 'b4'].includes(firstMove)) {
+                    repertoires.flank.push(openingName);
+                } else {
+                    repertoires.other.push(openingName);
+                }
+            }
+        });
+
+        // Remove duplicates and store
+        Object.keys(repertoires).forEach(key => {
+            repertoires[key] = [...new Set(repertoires[key])];
+        });
+
+        myVars.openingRepertoires = repertoires;
+
+        console.log('Opening repertoires categorized:', {
+            'King\'s Pawn (1.e4)': repertoires.kings_pawn.length,
+            'Queen\'s Pawn (1.d4)': repertoires.queens_pawn.length,
+            'English Opening': repertoires.english.length,
+            'Flank Openings': repertoires.flank.length,
+            'Other': repertoires.other.length
+        });
+
+        // Update the dropdown options with actual counts
+        myFunctions.updateRepertoireDropdown();
+
+        // Send repertoires data to server if external window is open
+        if (myVars.useExternalWindow && myVars.externalWindowOpen && myVars.serverConnected) {
+            myFunctions.sendServerUpdate();
+        }
+    };
+
+    // Function to extract the first move from a moves string
+    myFunctions.extractFirstMove = function(movesString) {
+        if (!movesString) return null;
+
+        // Split by spaces and filter out move numbers
+        const parts = movesString.trim().split(/\s+/);
+        const moves = parts.filter(part => !part.match(/^\d+\.$/));
+
+        if (moves.length === 0) return null;
+
+        // Return the first actual move, cleaned of annotations
+        return moves[0].replace(/[+#!?]/g, '');
+    };
     
     myFunctions.getOpeningMove = function(fen) {
         if (!myVars.useOpeningBook || !myVars.openingBook) {
             return null;
         }
-        
+
         // Check if current position is in opening book
         const position = myVars.openingBook[fen];
         if (position && position.moves) {
+            // Check if this opening matches the selected repertoire
+            if (!myFunctions.isOpeningInRepertoire(position)) {
+                return null;
+            }
+
             // Parse the moves string to get all moves
             const moves = position.moves.trim().split(/\s+/);
-            
+
             // Filter out move numbers (like "1.", "2.", etc.)
             const actualMoves = moves.filter(move => !move.match(/^\d+\.$/));
-            
+
             if (actualMoves.length === 0) {
                 return null;
             }
-            
+
             // Get the last move
             const lastMove = actualMoves[actualMoves.length - 1];
-            
+
             // Convert algebraic notation to UCI format if needed
             const uciMove = myFunctions.algebraicToUci(lastMove, fen);
-            
+
             console.log('Opening book move found:', {
                 name: position.name,
                 eco: position.eco,
                 move: lastMove,
                 uci: uciMove,
-                allMoves: actualMoves
+                allMoves: actualMoves,
+                repertoire: myVars.selectedOpeningRepertoire
             });
-            
+
+            // Mark that this move is from the opening book
+            myVars.lastMoveFromBook = true;
+
             return uciMove;
         }
-        
+
         return null;
     };
-    
+
+    // Function to check if an opening matches the selected repertoire
+    myFunctions.isOpeningInRepertoire = function(position) {
+        if (myVars.selectedOpeningRepertoire === 'mixed') {
+            return true; // Mixed repertoire includes all openings
+        }
+
+        if (!myVars.openingRepertoires || !position.name) {
+            return false; // No repertoire data or opening name
+        }
+
+        const repertoire = myVars.openingRepertoires[myVars.selectedOpeningRepertoire];
+        if (!repertoire) {
+            return false;
+        }
+
+        // Check if this opening is in the selected repertoire
+        return repertoire.includes(position.name.toLowerCase());
+    };
+
+    // Function to update the repertoire dropdown with actual opening counts
+    myFunctions.updateRepertoireDropdown = function() {
+        const dropdown = document.getElementById('openingRepertoire');
+        if (!dropdown || !myVars.openingRepertoires) return;
+
+        const repertoires = myVars.openingRepertoires;
+        const totalOpenings = Object.values(repertoires).reduce((sum, arr) => sum + arr.length, 0);
+
+        // Update dropdown options with actual counts
+        dropdown.innerHTML = `
+            <option value="mixed">Mixed Repertoire (${totalOpenings} openings)</option>
+            <option value="kings_pawn">King's Pawn (1.e4) - ${repertoires.kings_pawn.length} openings</option>
+            <option value="queens_pawn">Queen's Pawn (1.d4) - ${repertoires.queens_pawn.length} openings</option>
+            <option value="english">English Opening (1.c4/1.Nf3) - ${repertoires.english.length} openings</option>
+            <option value="flank">Flank Openings - ${repertoires.flank.length} openings</option>
+        `;
+
+        // Restore the selected value
+        dropdown.value = myVars.selectedOpeningRepertoire;
+
+        console.log('Updated repertoire dropdown with actual opening counts');
+    };
+
+    // Function to get the repertoire display name
+    myFunctions.getRepertoireName = function(repertoire) {
+        if (!myVars.openingRepertoires) {
+            const repertoireNames = {
+                'mixed': 'Mixed Repertoire',
+                'kings_pawn': "King's Pawn (1.e4)",
+                'queens_pawn': "Queen's Pawn (1.d4)",
+                'english': 'English Opening',
+                'flank': 'Flank Openings'
+            };
+            return repertoireNames[repertoire] || 'Unknown';
+        }
+
+        const repertoires = myVars.openingRepertoires;
+        const totalOpenings = Object.values(repertoires).reduce((sum, arr) => sum + arr.length, 0);
+
+        switch (repertoire) {
+            case 'mixed':
+                return `Mixed Repertoire (${totalOpenings} openings)`;
+            case 'kings_pawn':
+                return `King's Pawn (1.e4) - ${repertoires.kings_pawn.length} openings`;
+            case 'queens_pawn':
+                return `Queen's Pawn (1.d4) - ${repertoires.queens_pawn.length} openings`;
+            case 'english':
+                return `English Opening (1.c4/1.Nf3) - ${repertoires.english.length} openings`;
+            case 'flank':
+                return `Flank Openings - ${repertoires.flank.length} openings`;
+            default:
+                return 'Unknown';
+        }
+    };
+
     myFunctions.algebraicToUci = function(algebraicMove, fen) {
         // Simple conversion for common moves - this is a basic implementation
         // For a complete implementation, you'd need a full chess library
@@ -2689,19 +2857,25 @@ function main() {
             // Store current opening info
             myVars.currentOpening = openingInfo;
 
+            // Determine if we're in book or using engine
+            const inBookText = myVars.lastMoveFromBook ?
+                '<span style="color: #4CAF50; font-size: 10px;">📖 In Book</span>' :
+                '<span style="color: #FF9800; font-size: 10px;">🔧 Engine</span>';
+
             // Update display content
             const ecoText = openingInfo.eco ? ` (${openingInfo.eco})` : '';
             openingDisplay.innerHTML = `
                 <div style="font-weight: 600; font-size: 13px; color: #2c3e50; margin-bottom: 2px;">
                     ${openingInfo.name}
                 </div>
-                <div style="font-size: 11px; color: #7f8c8d;">
-                    ${ecoText}
+                <div style="font-size: 11px; color: #7f8c8d; display: flex; justify-content: space-between; align-items: center;">
+                    <span>${ecoText}</span>
+                    ${inBookText}
                 </div>
             `;
             openingDisplay.style.display = 'block';
 
-            console.log('Opening detected:', openingInfo.name, ecoText);
+            console.log('Opening detected:', openingInfo.name, ecoText, myVars.lastMoveFromBook ? '(In Book)' : '(Engine)');
         } else {
             // Hide display if no opening detected
             openingDisplay.style.display = 'none';
@@ -3649,6 +3823,21 @@ function main() {
                     </div>
                     <div id="openingBookLoadStatus" style="font-size: 11px; color: #999; margin-top: 3px;">
                         Opening book not loaded
+                    </div>
+
+                    <!-- Opening Repertoire Selection -->
+                    <div style="margin-top: 10px; padding-top: 8px; border-top: 1px solid #ddd;">
+                        <label for="openingRepertoire" style="display: block; margin-bottom: 5px; font-weight: bold; color: #2c3e50; font-size: 12px;">Opening Repertoire:</label>
+                        <select id="openingRepertoire" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #ddd; background-color: black; font-size: 12px;">
+                            <option value="mixed">Mixed Repertoire (Loading...)</option>
+                            <option value="kings_pawn">King's Pawn (1.e4) - Loading...</option>
+                            <option value="queens_pawn">Queen's Pawn (1.d4) - Loading...</option>
+                            <option value="english">English Opening (1.c4/1.Nf3) - Loading...</option>
+                            <option value="flank">Flank Openings - Loading...</option>
+                        </select>
+                        <div style="font-size: 10px; color: #666; margin-top: 3px;">
+                            Choose which opening style the AI should prioritize when playing as White
+                        </div>
                     </div>
 
                     <!-- Opening Display Toggle -->
@@ -4735,6 +4924,8 @@ function main() {
                     $('#openingBookLoadStatus').text('Loading opening book...');
                     myFunctions.fetchOpeningBook().then(() => {
                         myFunctions.updateOpeningBookStatus();
+                        // Update dropdown with actual counts after loading
+                        myFunctions.updateRepertoireDropdown();
                     });
                 }
             });
@@ -4755,6 +4946,46 @@ function main() {
                     </div>
                 `;
                 myFunctions.showModal('Opening Book Information', info);
+            });
+
+            // Opening repertoire selection event handler
+            $('#openingRepertoire').on('change', function() {
+                myVars.selectedOpeningRepertoire = this.value;
+                console.log('Opening repertoire changed to:', this.value);
+
+                // Save settings when repertoire changes
+                myFunctions.saveSettings();
+
+                // Show a brief notification about the change
+                const notification = document.createElement('div');
+                notification.textContent = `Opening repertoire set to: ${myFunctions.getRepertoireName(this.value)}`;
+                notification.style = `
+                    position: fixed;
+                    bottom: 20px;
+                    right: 20px;
+                    background-color: #4CAF50;
+                    color: white;
+                    padding: 8px 16px;
+                    border-radius: 4px;
+                    z-index: 9999;
+                    font-size: 12px;
+                    opacity: 0;
+                    transition: opacity 0.3s;
+                `;
+                document.body.appendChild(notification);
+
+                setTimeout(() => {
+                    notification.style.opacity = '1';
+                }, 10);
+
+                setTimeout(() => {
+                    notification.style.opacity = '0';
+                    setTimeout(() => {
+                        if (document.body.contains(notification)) {
+                            document.body.removeChild(notification);
+                        }
+                    }, 300);
+                }, 2000);
             });
 
             // Opening display toggle event handler
@@ -5861,6 +6092,10 @@ function main() {
             depth: parseInt($('#depthSlider')[0].value) || 11,
             elo: myVars.eloRating || 1500,
 
+            // Opening book settings
+            selected_opening_repertoire: myVars.selectedOpeningRepertoire,
+            opening_repertoires: myVars.openingRepertoires,
+
             // Settings synchronization metadata
             settings_last_updated: myVars.settings_last_updated,
             settings_update_source: 'userscript',
@@ -6148,6 +6383,24 @@ function main() {
                 }
                 break;
 
+            case 'update_opening_repertoire':
+                // Update the opening repertoire selection
+                if (params) {
+                    const selectedRepertoire = params.selected_opening_repertoire;
+                    console.log('Updating opening repertoire to:', selectedRepertoire);
+
+                    myVars.selectedOpeningRepertoire = selectedRepertoire;
+
+                    // Update the UI if the element exists
+                    if ($('#openingRepertoire')[0]) {
+                        $('#openingRepertoire').val(selectedRepertoire);
+                    }
+
+                    // Save the settings
+                    myFunctions.saveSettings();
+                }
+                break;
+
             case 'update_visual_settings':
                 // Update visual settings from the external window
                 if (params) {
@@ -6372,6 +6625,10 @@ function main() {
             autoQueue: $('#autoQueue')[0].checked,
             timeDelayMin: parseFloat($('#timeDelayMin')[0].value),
             timeDelayMax: parseFloat($('#timeDelayMax')[0].value),
+            // Opening book settings
+            useOpeningBook: myVars.useOpeningBook,
+            selectedOpeningRepertoire: myVars.selectedOpeningRepertoire,
+            showOpeningDisplay: myVars.showOpeningDisplay,
             // Clock synchronization settings
             clockSync: $('#clockSync')[0] ? $('#clockSync')[0].checked : false,
             clockSyncMinDelay: $('#clockSyncMinDelay')[0] ? parseFloat($('#clockSyncMinDelay')[0].value) : 0.5,
@@ -6777,6 +7034,21 @@ function main() {
                     const status = $('#openingDisplayStatus');
                     status.text(myVars.showOpeningDisplay ? 'Enabled' : 'Disabled');
                     status.css('color', myVars.showOpeningDisplay ? '#4CAF50' : '#666');
+                }
+
+                // Set opening repertoire selection
+                if (settings.selectedOpeningRepertoire !== undefined && $('#openingRepertoire')[0]) {
+                    myVars.selectedOpeningRepertoire = settings.selectedOpeningRepertoire;
+                    $('#openingRepertoire').val(settings.selectedOpeningRepertoire);
+                }
+
+                // Set opening book settings
+                if (settings.useOpeningBook !== undefined) {
+                    myVars.useOpeningBook = settings.useOpeningBook;
+                }
+
+                if (settings.showOpeningDisplay !== undefined) {
+                    myVars.showOpeningDisplay = settings.showOpeningDisplay;
                 }
 
                 // Initialize fusion mode UI after settings are loaded

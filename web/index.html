@@ -378,6 +378,16 @@
                         <input type="range" id="elo" min="1000" max="3000" step="50" value="1500">
                         <span id="elo-value">1500</span>
                     </div>
+                    <div class="setting-row">
+                        <label for="opening-repertoire">Opening Repertoire:</label>
+                        <select id="opening-repertoire" style="flex: 1; padding: 5px;">
+                            <option value="mixed">Mixed Repertoire (Loading...)</option>
+                            <option value="kings_pawn">King's Pawn (1.e4) - Loading...</option>
+                            <option value="queens_pawn">Queen's Pawn (1.d4) - Loading...</option>
+                            <option value="english">English Opening (1.c4/1.Nf3) - Loading...</option>
+                            <option value="flank">Flank Openings - Loading...</option>
+                        </select>
+                    </div>
                 </div>
 
                 <!-- Visual Settings Tab -->
@@ -510,6 +520,10 @@
             depth: 11,
             elo: 1500,
 
+            // Opening book settings
+            selected_opening_repertoire: "mixed",
+            opening_repertoires: null,
+
             // Move indicator settings
             move_indicator_location: "main",
             move_indicator_type: "highlights",
@@ -569,6 +583,29 @@
             'q': 'https://www.chess.com/chess-themes/pieces/neo/150/bq.png', // black queen
             'k': 'https://www.chess.com/chess-themes/pieces/neo/150/bk.png'  // black king
         };
+
+        // Function to update the opening repertoire dropdown with actual counts
+        function updateOpeningRepertoireDropdown() {
+            const dropdown = document.getElementById('opening-repertoire');
+            if (!dropdown || !chessState.opening_repertoires) return;
+
+            const repertoires = chessState.opening_repertoires;
+            const totalOpenings = Object.values(repertoires).reduce((sum, arr) => sum + arr.length, 0);
+
+            // Update dropdown options with actual counts
+            dropdown.innerHTML = `
+                <option value="mixed">Mixed Repertoire (${totalOpenings} openings)</option>
+                <option value="kings_pawn">King's Pawn (1.e4) - ${repertoires.kings_pawn.length} openings</option>
+                <option value="queens_pawn">Queen's Pawn (1.d4) - ${repertoires.queens_pawn.length} openings</option>
+                <option value="english">English Opening (1.c4/1.Nf3) - ${repertoires.english.length} openings</option>
+                <option value="flank">Flank Openings - ${repertoires.flank.length} openings</option>
+            `;
+
+            // Restore the selected value
+            dropdown.value = chessState.selected_opening_repertoire;
+
+            console.log('Updated external window repertoire dropdown with actual opening counts');
+        }
 
         // Initialize the chess board
         function initializeChessBoard() {
@@ -1144,6 +1181,16 @@
                         document.getElementById('elo').value = chessState.elo;
                         document.getElementById('elo-value').textContent = chessState.elo;
 
+                        // Update opening repertoire setting
+                        if (chessState.selected_opening_repertoire !== undefined) {
+                            document.getElementById('opening-repertoire').value = chessState.selected_opening_repertoire;
+                        }
+
+                        // Update opening repertoire dropdown if repertoires data is available
+                        if (chessState.opening_repertoires) {
+                            updateOpeningRepertoireDropdown();
+                        }
+
                         // Update automation settings
                         document.getElementById('auto-move-toggle').checked = chessState.auto_move;
                         document.getElementById('auto-run-toggle').checked = chessState.auto_run;
@@ -1375,6 +1422,12 @@
                 const elo = parseInt(this.value);
                 document.getElementById('elo-value').textContent = elo;
                 sendCommand('update_elo', { elo: elo });
+            });
+
+            document.getElementById('opening-repertoire').addEventListener('change', function() {
+                console.log('External board: opening-repertoire changed to', this.value);
+                chessState.selected_opening_repertoire = this.value;
+                sendCommand('update_opening_repertoire', { selected_opening_repertoire: this.value });
             });
 
             // Add event listeners for visual settings

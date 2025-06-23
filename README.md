@@ -53,16 +53,28 @@ A powerful browser extension that enhances Chess.com with integrated Stockfish a
 #### Settings Panel
 The settings panel provides access to all features and is organized into tabs:
 
-- **Engine**: Set depth and ELO rating
+- **Engine**: Set depth, ELO rating, and opening book settings including repertoire selection
 - **Actions**: Run/stop engine, save settings
 - **Visual**: Customize evaluation bar colors, move indicators, and external window options
 - **Play Style**: Configure Human Mode and Fusion Mode
 - **Auto**: Set up automatic analysis and moves
 
 The external window interface has its own settings tabs:
-- **Engine**: Control depth and run/stop the engine
+- **Engine**: Control depth, ELO rating, and opening repertoire selection
 - **Visual**: Customize move indicators and evaluation bar
 - **Interface**: Configure auto-run/move settings and main controls visibility
+
+#### Opening Book & Repertoire Selection
+The Chess AI includes a comprehensive opening book with intelligent repertoire selection:
+
+- **Dynamic Categorization**: Opening repertoires are automatically categorized by analyzing the actual opening book data
+- **Mixed Repertoire**: Uses all available openings from the database
+- **King's Pawn (1.e4)**: Dynamically filtered openings starting with 1.e4
+- **Queen's Pawn (1.d4)**: Dynamically filtered openings starting with 1.d4
+- **English Opening**: Dynamically filtered openings starting with 1.c4 or 1.Nf3
+- **Flank Openings**: Dynamically filtered hypermodern and flank openings
+
+The dropdown shows the actual number of openings available in each category. The opening display shows when the AI is playing "in book" moves vs. engine-calculated moves, helping you understand the source of each recommendation.
 
 #### Human Mode
 Makes the engine play with human-like characteristics:

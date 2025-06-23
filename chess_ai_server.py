@@ -22,6 +22,10 @@ chess_state = {
     "depth": 11,
     "elo": 1500,
 
+    # Opening book settings
+    "selected_opening_repertoire": "mixed",
+    "opening_repertoires": None,
+
     # Visual settings with timestamps for synchronization
     "move_indicator_location": "main",
     "move_indicator_type": "highlights",
@@ -1795,6 +1799,23 @@ class ChessAIHandler(http.server.SimpleHTTPRequestHandler):
                     })
 
                     response = {"status": "success", "message": f"Auto run delay updated to {min_delay}-{max_delay} seconds"}
+                elif command == 'update_opening_repertoire':
+                    # Update the opening repertoire selection
+                    params = data.get('params', {})
+                    selected_repertoire = params.get('selected_opening_repertoire', 'mixed')
+
+                    chess_state['selected_opening_repertoire'] = selected_repertoire
+
+                    # Add the command to the pending commands queue for the userscript
+                    chess_state['pending_commands'].append({
+                        'command': 'update_opening_repertoire',
+                        'params': {
+                            'selected_opening_repertoire': selected_repertoire
+                        },
+                        'timestamp': time.time()
+                    })
+
+                    response = {"status": "success", "message": f"Opening repertoire updated to {selected_repertoire}"}
                 elif command == 'update_visual_settings':
                     # Handle visual settings update from the external board
                     print("Received visual settings update from external board")
