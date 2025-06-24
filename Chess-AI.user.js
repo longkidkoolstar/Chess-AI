@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Chess AI
 // @namespace    github.com/longkidkoolstar
-// @version      4.1.0
+// @version      4.1.1
 // @description  Chess.com Bot/Cheat that finds the best move with evaluation bar and ELO control!
 // @author       longkidkoolstar
 // @license      none
@@ -74,27 +74,33 @@ function main() {
     myFunctions.parseTimeString = function(timeString) {
         if (!timeString || typeof timeString !== 'string') return null;
 
-        // Remove any non-digit and non-colon characters
-        const cleanTime = timeString.replace(/[^\d:]/g, '');
+        // Remove any non-digit, non-colon, and non-decimal point characters
+        const cleanTime = timeString.replace(/[^\d:.]/g, '');
 
-        // Handle different time formats: MM:SS, H:MM:SS, M:SS, etc.
+        // Handle different time formats: MM:SS, H:MM:SS, M:SS, MM:SS.s, etc.
         const parts = cleanTime.split(':');
         let totalSeconds = 0;
 
         if (parts.length === 2) {
-            // MM:SS format
+            // MM:SS or MM:SS.s format
             const minutes = parseInt(parts[0]) || 0;
-            const seconds = parseInt(parts[1]) || 0;
+            const secondsPart = parts[1];
+
+            // Handle fractional seconds (e.g., "01.6" -> 1.6 seconds)
+            const seconds = parseFloat(secondsPart) || 0;
             totalSeconds = minutes * 60 + seconds;
         } else if (parts.length === 3) {
-            // H:MM:SS format
+            // H:MM:SS or H:MM:SS.s format
             const hours = parseInt(parts[0]) || 0;
             const minutes = parseInt(parts[1]) || 0;
-            const seconds = parseInt(parts[2]) || 0;
+            const secondsPart = parts[2];
+
+            // Handle fractional seconds
+            const seconds = parseFloat(secondsPart) || 0;
             totalSeconds = hours * 3600 + minutes * 60 + seconds;
         } else if (parts.length === 1) {
-            // Just seconds
-            totalSeconds = parseInt(parts[0]) || 0;
+            // Just seconds (could be fractional)
+            totalSeconds = parseFloat(parts[0]) || 0;
         }
 
         return totalSeconds > 0 ? totalSeconds : null;
@@ -2574,6 +2580,7 @@ function main() {
     myVars.lastMoveFromBook = false; // Track if last move was from opening book
     myVars.showOpeningDisplay = true; // Default to showing opening names
     myVars.openingRepertoires = null; // Will store categorized openings
+    myVars.maxOpeningBookMoves = 10; // Maximum number of moves to follow from opening book
     
     myFunctions.fetchOpeningBook = async function() {
         try {
@@ -2604,6 +2611,8 @@ function main() {
         };
 
         // Analyze each opening in the book
+        let categorizedCount = 0;
+        let kingsePawnCount = 0;
         Object.values(openingBook).forEach(position => {
             if (!position.name || !position.moves) return;
 
@@ -2614,9 +2623,18 @@ function main() {
             const firstMove = myFunctions.extractFirstMove(moves);
 
             if (firstMove) {
+                categorizedCount++;
                 // Categorize based on the first move
                 if (firstMove === 'e4') {
                     repertoires.kings_pawn.push(openingName);
+                    kingsePawnCount++;
+                    if (kingsePawnCount <= 5) { // Log first 5 King's Pawn openings for debugging
+                        console.log('King\'s Pawn opening categorized:', {
+                            name: openingName,
+                            moves: moves,
+                            firstMove: firstMove
+                        });
+                    }
                 } else if (firstMove === 'd4') {
                     repertoires.queens_pawn.push(openingName);
                 } else if (firstMove === 'c4' || firstMove === 'Nf3') {
@@ -2626,7 +2644,18 @@ function main() {
                 } else {
                     repertoires.other.push(openingName);
                 }
+            } else {
+                console.log('Could not extract first move from:', {
+                    name: position.name,
+                    moves: moves
+                });
             }
+        });
+
+        console.log('Opening categorization complete:', {
+            totalPositions: Object.keys(openingBook).length,
+            categorizedPositions: categorizedCount,
+            kingsePawnOpenings: kingsePawnCount
         });
 
         // Remove duplicates and store
@@ -2666,49 +2695,224 @@ function main() {
         // Return the first actual move, cleaned of annotations
         return moves[0].replace(/[+#!?]/g, '');
     };
+
+    // Function to get the next move from an opening sequence based on current position
+    myFunctions.getNextMoveFromOpeningSequence = function(movesString, currentFEN) {
+        if (!movesString || !currentFEN) return null;
+
+        try {
+            // Parse the moves string to get all moves
+            const parts = movesString.trim().split(/\s+/);
+            const moves = parts.filter(part => !part.match(/^\d+\.$/));
+
+            if (moves.length === 0) return null;
+
+            console.log('Parsing opening sequence:', {
+                fullSequence: movesString,
+                parsedMoves: moves,
+                currentFEN: currentFEN
+            });
+
+            // Count the number of moves played so far by analyzing the FEN
+            // The FEN format includes the move number at the end
+            const fenParts = currentFEN.split(' ');
+            const moveNumber = parseInt(fenParts[5]) || 1; // Full move number
+            const activeColor = fenParts[1]; // 'w' for white, 'b' for black
+
+            // Calculate the move index in the sequence
+            // Move 1: White plays move 0, Black plays move 1
+            // Move 2: White plays move 2, Black plays move 3
+            // etc.
+            let moveIndex;
+            if (activeColor === 'w') {
+                // It's White's turn, so we need the White move for this move number
+                moveIndex = (moveNumber - 1) * 2;
+            } else {
+                // It's Black's turn, so we need the Black move for this move number
+                moveIndex = (moveNumber - 1) * 2 + 1;
+            }
+
+            console.log('Move calculation:', {
+                moveNumber: moveNumber,
+                activeColor: activeColor,
+                calculatedMoveIndex: moveIndex,
+                totalMovesInSequence: moves.length
+            });
+
+            // Check if we've exceeded the maximum opening book moves
+            const totalMovesPlayed = Math.floor((moveIndex + 1) / 2) + (moveIndex % 2);
+            if (totalMovesPlayed > myVars.maxOpeningBookMoves) {
+                console.log(`Reached maximum opening book moves limit (${myVars.maxOpeningBookMoves}), switching to engine`);
+                return null;
+            }
+
+            // Check if we have a move at this index
+            if (moveIndex >= 0 && moveIndex < moves.length) {
+                const nextMove = moves[moveIndex].replace(/[+#!?]/g, ''); // Clean annotations
+                console.log('Found next move in sequence:', {
+                    move: nextMove,
+                    moveIndex: moveIndex,
+                    totalMovesPlayed: totalMovesPlayed,
+                    maxAllowed: myVars.maxOpeningBookMoves
+                });
+                return nextMove;
+            } else {
+                console.log('Move index out of bounds, sequence complete or invalid');
+                return null;
+            }
+
+        } catch (error) {
+            console.error('Error parsing opening sequence:', error);
+            return null;
+        }
+    };
     
+    // Function to get the first move based on selected repertoire
+    myFunctions.getFirstMoveFromRepertoire = function() {
+        if (!myVars.selectedOpeningRepertoire || myVars.selectedOpeningRepertoire === 'mixed') {
+            // For mixed repertoire, randomly choose between the main opening moves
+            const firstMoves = [
+                { move: 'e2e4', name: "King's Pawn Opening" },
+                { move: 'd2d4', name: "Queen's Pawn Opening" },
+                { move: 'g1f3', name: "Réti Opening" },
+                { move: 'c2c4', name: "English Opening" }
+            ];
+            const randomChoice = firstMoves[Math.floor(Math.random() * firstMoves.length)];
+            console.log('Mixed repertoire: randomly selected', randomChoice.name, '(' + randomChoice.move + ')');
+            return { move: randomChoice.move, name: randomChoice.name };
+        }
+
+        // Map repertoire to first move options with names
+        const repertoireFirstMoves = {
+            'kings_pawn': [
+                { move: 'e2e4', name: "King's Pawn Opening" },
+                { move: 'e2e4', name: "King's Pawn Opening" }, // Weight e4 more heavily
+                { move: 'e2e4', name: "King's Pawn Opening" }
+            ],
+            'queens_pawn': [
+                { move: 'd2d4', name: "Queen's Pawn Opening" },
+                { move: 'd2d4', name: "Queen's Pawn Opening" }, // Weight d4 more heavily
+                { move: 'g1f3', name: "Queen's Pawn: Réti System" },
+                { move: 'c2c4', name: "Queen's Pawn: English Transposition" }
+            ],
+            'english': [
+                { move: 'c2c4', name: "English Opening" },
+                { move: 'c2c4', name: "English Opening" }, // Weight c4 more heavily
+                { move: 'g1f3', name: "English Opening: Réti System" },
+                { move: 'g1f3', name: "English Opening: King's Indian Attack" }
+            ],
+            'flank': [
+                { move: 'g1f3', name: "Réti Opening" },
+                { move: 'g1f3', name: "King's Indian Attack" },
+                { move: 'b2b3', name: "Nimzo-Larsen Attack" },
+                { move: 'f2f4', name: "Dutch Attack" },
+                { move: 'g2g3', name: "Benko Opening" },
+                { move: 'b1c3', name: "Van't Kruijs Opening" }
+            ],
+            'other': [
+                { move: 'g1f3', name: "Réti Opening" },
+                { move: 'b1c3', name: "Van't Kruijs Opening" },
+                { move: 'f2f4', name: "Dutch Attack" },
+                { move: 'g2g3', name: "Benko Opening" },
+                { move: 'b2b3', name: "Nimzo-Larsen Attack" },
+                { move: 'h2h3', name: "Clemenz Opening" }
+            ]
+        };
+
+        const choices = repertoireFirstMoves[myVars.selectedOpeningRepertoire];
+        if (!choices || choices.length === 0) {
+            // Fallback to Réti Opening if repertoire not found
+            const fallback = { move: 'g1f3', name: "Réti Opening" };
+            console.log(`Repertoire ${myVars.selectedOpeningRepertoire} not found, using fallback:`, fallback.name, '(' + fallback.move + ')');
+            return fallback;
+        }
+
+        const choice = choices[Math.floor(Math.random() * choices.length)];
+        console.log(`Selected first move for ${myVars.selectedOpeningRepertoire} repertoire:`, choice.name, '(' + choice.move + ')');
+        return choice;
+    };
+
     myFunctions.getOpeningMove = function(fen) {
         if (!myVars.useOpeningBook || !myVars.openingBook) {
+            console.log('Opening book not available:', {
+                useOpeningBook: myVars.useOpeningBook,
+                openingBookLoaded: !!myVars.openingBook
+            });
             return null;
+        }
+
+        // Check if this is the starting position (AI going first)
+        const startingFEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+        if (fen === startingFEN) {
+            console.log('Starting position detected, selecting first move from repertoire');
+            const firstMoveChoice = myFunctions.getFirstMoveFromRepertoire();
+            if (firstMoveChoice) {
+                console.log('Using opening book move:', firstMoveChoice.name, '(' + firstMoveChoice.move + ')');
+                myVars.lastMoveFromBook = true;
+                return firstMoveChoice.move;
+            }
         }
 
         // Check if current position is in opening book
         const position = myVars.openingBook[fen];
         if (position && position.moves) {
-            // Check if this opening matches the selected repertoire
-            if (!myFunctions.isOpeningInRepertoire(position)) {
-                return null;
-            }
-
-            // Parse the moves string to get all moves
-            const moves = position.moves.trim().split(/\s+/);
-
-            // Filter out move numbers (like "1.", "2.", etc.)
-            const actualMoves = moves.filter(move => !move.match(/^\d+\.$/));
-
-            if (actualMoves.length === 0) {
-                return null;
-            }
-
-            // Get the last move
-            const lastMove = actualMoves[actualMoves.length - 1];
-
-            // Convert algebraic notation to UCI format if needed
-            const uciMove = myFunctions.algebraicToUci(lastMove, fen);
-
-            console.log('Opening book move found:', {
+            console.log('Position found in opening book:', {
                 name: position.name,
                 eco: position.eco,
-                move: lastMove,
-                uci: uciMove,
-                allMoves: actualMoves,
-                repertoire: myVars.selectedOpeningRepertoire
+                moves: position.moves,
+                selectedRepertoire: myVars.selectedOpeningRepertoire
             });
 
-            // Mark that this move is from the opening book
-            myVars.lastMoveFromBook = true;
+            // Check if this opening matches the selected repertoire
+            const isInRepertoire = myFunctions.isOpeningInRepertoire(position);
+            console.log('Repertoire check result:', {
+                isInRepertoire: isInRepertoire,
+                openingName: position.name,
+                selectedRepertoire: myVars.selectedOpeningRepertoire,
+                availableRepertoires: myVars.openingRepertoires ? Object.keys(myVars.openingRepertoires) : 'not loaded'
+            });
 
-            return uciMove;
+            if (!isInRepertoire) {
+                console.log('Opening not in selected repertoire, skipping');
+                return null;
+            }
+
+            // The opening book structure might contain the full game moves
+            // We need to find the next move to play from the current position
+            const nextMove = myFunctions.getNextMoveFromOpeningSequence(position.moves, fen);
+
+            if (nextMove) {
+                // Convert algebraic notation to UCI format if needed
+                const uciMove = myFunctions.algebraicToUci(nextMove, fen);
+
+                // Create a descriptive name for the console log
+                const ecoText = position.eco ? ` (${position.eco})` : '';
+                console.log('Using opening book move:', `${position.name}${ecoText} - ${nextMove} (${uciMove})`);
+
+                console.log('Opening book move details:', {
+                    name: position.name,
+                    eco: position.eco,
+                    move: nextMove,
+                    uci: uciMove,
+                    fullSequence: position.moves,
+                    repertoire: myVars.selectedOpeningRepertoire
+                });
+
+                // Mark that this move is from the opening book
+                myVars.lastMoveFromBook = true;
+
+                return uciMove;
+            } else {
+                console.log('Could not determine next move from opening sequence:', position.moves);
+            }
+        } else {
+            console.log('Position not found in opening book for FEN:', fen);
+
+            // Debug: Show some sample FENs from the opening book to understand the structure
+            if (myVars.openingBook && Object.keys(myVars.openingBook).length > 0) {
+                const sampleFENs = Object.keys(myVars.openingBook).slice(0, 3);
+                console.log('Sample FENs in opening book:', sampleFENs);
+            }
         }
 
         return null;
@@ -2716,21 +2920,48 @@ function main() {
 
     // Function to check if an opening matches the selected repertoire
     myFunctions.isOpeningInRepertoire = function(position) {
+        console.log('Checking if opening is in repertoire:', {
+            selectedRepertoire: myVars.selectedOpeningRepertoire,
+            openingName: position.name,
+            hasRepertoireData: !!myVars.openingRepertoires
+        });
+
         if (myVars.selectedOpeningRepertoire === 'mixed') {
+            console.log('Mixed repertoire selected, allowing all openings');
             return true; // Mixed repertoire includes all openings
         }
 
         if (!myVars.openingRepertoires || !position.name) {
+            console.log('Missing repertoire data or opening name:', {
+                hasRepertoires: !!myVars.openingRepertoires,
+                hasOpeningName: !!position.name
+            });
             return false; // No repertoire data or opening name
         }
 
         const repertoire = myVars.openingRepertoires[myVars.selectedOpeningRepertoire];
         if (!repertoire) {
+            console.log('Selected repertoire not found:', {
+                selectedRepertoire: myVars.selectedOpeningRepertoire,
+                availableRepertoires: Object.keys(myVars.openingRepertoires)
+            });
             return false;
         }
 
+        const openingNameLower = position.name.toLowerCase();
+        const isIncluded = repertoire.includes(openingNameLower);
+
+        console.log('Repertoire check details:', {
+            openingName: position.name,
+            openingNameLower: openingNameLower,
+            selectedRepertoire: myVars.selectedOpeningRepertoire,
+            repertoireSize: repertoire.length,
+            isIncluded: isIncluded,
+            repertoireSample: repertoire.slice(0, 5) // Show first 5 entries for debugging
+        });
+
         // Check if this opening is in the selected repertoire
-        return repertoire.includes(position.name.toLowerCase());
+        return isIncluded;
     };
 
     // Function to update the repertoire dropdown with actual opening counts
@@ -2844,6 +3075,67 @@ function main() {
         }
 
         return null;
+    };
+
+    // Debug function to check opening book status
+    myFunctions.debugOpeningBook = function() {
+        console.log('=== Opening Book Debug Info ===');
+        console.log('Opening book loaded:', !!myVars.openingBook);
+        console.log('Opening book enabled:', myVars.useOpeningBook);
+        console.log('Selected repertoire:', myVars.selectedOpeningRepertoire);
+
+        if (myVars.openingBook) {
+            console.log('Total positions in opening book:', Object.keys(myVars.openingBook).length);
+        }
+
+        if (myVars.openingRepertoires) {
+            console.log('Repertoire sizes:', {
+                'King\'s Pawn': myVars.openingRepertoires.kings_pawn?.length || 0,
+                'Queen\'s Pawn': myVars.openingRepertoires.queens_pawn?.length || 0,
+                'English': myVars.openingRepertoires.english?.length || 0,
+                'Flank': myVars.openingRepertoires.flank?.length || 0,
+                'Other': myVars.openingRepertoires.other?.length || 0
+            });
+
+            if (myVars.selectedOpeningRepertoire !== 'mixed') {
+                const selectedRepertoire = myVars.openingRepertoires[myVars.selectedOpeningRepertoire];
+                if (selectedRepertoire) {
+                    console.log(`Selected repertoire (${myVars.selectedOpeningRepertoire}) contains:`, selectedRepertoire.slice(0, 10));
+                }
+            }
+        } else {
+            console.log('Repertoires not loaded');
+        }
+
+        // Test first move selection
+        const firstMoveChoice = myFunctions.getFirstMoveFromRepertoire();
+        console.log('First move for selected repertoire:', firstMoveChoice?.name, '(' + firstMoveChoice?.move + ')');
+
+        if (board) {
+            const currentFEN = board.game.getFEN();
+            console.log('Current FEN:', currentFEN);
+
+            // Check if this is starting position
+            const startingFEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+            console.log('Is starting position:', currentFEN === startingFEN);
+
+            const position = myVars.openingBook?.[currentFEN];
+            if (position) {
+                console.log('Current position in opening book:', {
+                    name: position.name,
+                    eco: position.eco,
+                    moves: position.moves
+                });
+                console.log('Is in selected repertoire:', myFunctions.isOpeningInRepertoire(position));
+            } else {
+                console.log('Current position not in opening book');
+            }
+
+            // Test what move would be selected
+            const suggestedMove = myFunctions.getOpeningMove(currentFEN);
+            console.log('Suggested opening move:', suggestedMove);
+        }
+        console.log('=== End Debug Info ===');
     };
 
     // Function to update the opening display
