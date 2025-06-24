@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Chess AI
 // @namespace    github.com/longkidkoolstar
-// @version      4.1.1
+// @version      4.1.2
 // @description  Chess.com Bot/Cheat that finds the best move with evaluation bar and ELO control!
 // @author       longkidkoolstar
 // @license      none
@@ -20,7 +20,7 @@
 // ==/UserScript==
 
 
-const currentVersion = '4.1.1'; // Updated version number
+const currentVersion = '4.1.2'; // Updated version number
 
 function main() {
 
