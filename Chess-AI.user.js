@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Chess AI
 // @namespace    github.com/longkidkoolstar
-// @version      4.1.3
+// @version      4.1.4
 // @description  Chess.com Bot/Cheat that finds the best move with evaluation bar and ELO control!
 // @author       longkidkoolstar
 // @license      none
@@ -20,7 +20,7 @@
 // ==/UserScript==
 
 
-const currentVersion = '4.1.3'; // Updated version number
+const currentVersion = '4.1.4'; // Updated version number
 
 function main() {
 
@@ -45,6 +45,14 @@ function main() {
     myVars.moveIndicatorLocation = 'main'; // Where to show move indicators: 'main', 'external', or 'both'
     myVars.disableMainControls = false; // Option to disable main controls when connected to external window
     myVars.autoQueue = false; // Default to not auto-queuing new games
+    myVars.evalAlpha = 0.35;
+    myVars.evalEMA = 0;
+    myVars.evalBarCurrentPercent = 50;
+    myVars.evalBarTargetPercent = 50;
+    myVars.evalBarAnimationFrame = null;
+    myVars.winProbSlope = 1.4;
+    myVars.evalHistory = [];
+    myVars.evalHistoryMaxPoints = 60;
     // Clock synchronization variables
     myVars.clockSync = false; // Default to not using clock synchronization
     myVars.lastOpponentTime = null; // Last recorded opponent time in seconds
@@ -2059,13 +2067,20 @@ function main() {
 
         // Store the current evaluation for reference
         myVars.currentEvaluation = evalValue;
+        var smoothedEval = (typeof myVars.evalEMA === 'number' ? (myVars.evalAlpha * evalValue + (1 - myVars.evalAlpha) * myVars.evalEMA) : evalValue);
+        myVars.evalEMA = smoothedEval;
 
         // Clamp the visual representation between -5 and 5
         const clampedEval = Math.max(-5, Math.min(5, evalValue));
         const percentage = 50 + (clampedEval * 10); // Convert to percentage (0-100)
 
         // Smoothly animate the height change
-        evalBar.style.height = `${percentage}%`;
+        myVars.evalBarTargetPercent = percentage;
+        if (typeof myFunctions.animateEvalBar === 'function') {
+            myFunctions.animateEvalBar();
+        } else {
+            evalBar.style.height = `${percentage}%`;
+        }
 
         // Update color based on who's winning with smoother gradients
         let whiteColor = myVars.whiteAdvantageColor || '#4CAF50'; // White advantage
@@ -2112,6 +2127,15 @@ function main() {
         // Add subtle shadow at the top edge for depth effect
         evalBar.style.boxShadow = 'inset 0 1px 0 rgba(255,255,255,0.15)';
 
+        var sparkEval = Math.max(-5, Math.min(5, smoothedEval));
+        myVars.evalHistory.push(sparkEval);
+        if (myVars.evalHistory.length > myVars.evalHistoryMaxPoints) {
+            myVars.evalHistory.shift();
+        }
+        if (typeof myFunctions.updateEvalSparkline === 'function') {
+            myFunctions.updateEvalSparkline();
+        }
+
         // Update evaluation text with chess.com-like formatting
         if(mateText) {
             // Mate situation
@@ -2119,17 +2143,17 @@ function main() {
             evalText.innerHTML = `<span style="color: ${mateColor}">${mateText}</span>${depth ? `<br><span style="font-size: 10px; color: rgba(255,255,255,0.7)">d${depth}</span>` : ''}`;
             evalText.style.backgroundColor = '#2a2a2a';
         } else {
-            // Normal evaluation
-            const sign = evalValue > 0 ? '+' : '';
-            evalText.innerHTML = `<span style="color: ${textColor}">${sign}${Math.abs(evalValue).toFixed(1)}</span>${depth ? `<br><span style="font-size: 10px; color: rgba(255,255,255,0.7)">d${depth}</span>` : ''}`;
-
-            // Change background color based on advantage (subtle effect)
+            const sign = smoothedEval > 0 ? '+' : '';
+            const k = myVars.winProbSlope || 1.4;
+            const prob = 1/(1+Math.exp(-k*smoothedEval));
+            const side = smoothedEval >= 0 ? 'W' : 'B';
+            const pct = Math.round((side === 'W' ? prob : (1-prob))*100);
+            const depthLine = depth ? `<br><span style="font-size: 10px; color: rgba(255,255,255,0.7)">d${depth}</span>` : '';
+            evalText.innerHTML = `<span style="color: ${textColor}">${sign}${Math.abs(smoothedEval).toFixed(1)}</span><br><span style="font-size: 10px; color: rgba(255,255,255,0.8)">${side} ${pct}%</span>${depthLine}`;
             if(Math.abs(evalValue) > 3) {
-                // Strong advantage - highlight the evaluation text
                 evalText.style.backgroundColor = evalValue > 0 ? 'rgba(76, 175, 80, 0.2)' : 'rgba(244, 67, 54, 0.2)';
                 evalText.style.boxShadow = `0 2px 6px ${evalValue > 0 ? 'rgba(76, 175, 80, 0.3)' : 'rgba(244, 67, 54, 0.3)'}`;
             } else {
-                // Normal advantage
                 evalText.style.backgroundColor = '#2a2a2a';
                 evalText.style.boxShadow = '0 2px 6px rgba(0,0,0,0.3)';
             }
@@ -2158,6 +2182,69 @@ function main() {
         }
     `;
     document.head.appendChild(pulseAnimation);
+
+    myFunctions.animateEvalBar = function() {
+        if (!evalBar) return;
+        if (myVars.evalBarAnimationFrame) {
+            cancelAnimationFrame(myVars.evalBarAnimationFrame);
+            myVars.evalBarAnimationFrame = null;
+        }
+        var step = function() {
+            var current = myVars.evalBarCurrentPercent;
+            var target = myVars.evalBarTargetPercent;
+            var diff = target - current;
+            if (Math.abs(diff) < 0.2) {
+                myVars.evalBarCurrentPercent = target;
+                evalBar.style.height = target + '%';
+                myVars.evalBarAnimationFrame = null;
+                return;
+            }
+            myVars.evalBarCurrentPercent = current + diff * 0.15;
+            evalBar.style.height = myVars.evalBarCurrentPercent + '%';
+            myVars.evalBarAnimationFrame = requestAnimationFrame(step);
+        };
+        myVars.evalBarAnimationFrame = requestAnimationFrame(step);
+    }
+
+    myFunctions.updateEvalSparkline = function() {
+        var canvas = document.getElementById('evalSparklineCanvas');
+        if (!canvas) return;
+        var dpr = window.devicePixelRatio || 1;
+        var w = canvas.clientWidth;
+        var h = canvas.clientHeight;
+        if (canvas.width !== Math.floor(w * dpr) || canvas.height !== Math.floor(h * dpr)) {
+            canvas.width = Math.floor(w * dpr);
+            canvas.height = Math.floor(h * dpr);
+        }
+        var ctx = canvas.getContext('2d');
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, w, h);
+        ctx.fillStyle = 'rgba(0,0,0,0.04)';
+        ctx.fillRect(0, 0, w, h);
+        var data = myVars.evalHistory;
+        if (!data || data.length < 2) return;
+        var minY = -5;
+        var maxY = 5;
+        var xStep = w / (myVars.evalHistoryMaxPoints - 1);
+        var yScale = h / (maxY - minY);
+        ctx.lineWidth = 2;
+        var lastVal = data[data.length - 1] || 0;
+        ctx.strokeStyle = lastVal >= 0 ? (myVars.whiteAdvantageColor || '#4CAF50') : (myVars.blackAdvantageColor || '#F44336');
+        ctx.beginPath();
+        for (var i = 0; i < data.length; i++) {
+            var x = i * xStep;
+            var y = h - (data[i] - minY) * yScale;
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        var midY = h - (0 - minY) * yScale;
+        ctx.moveTo(0, midY);
+        ctx.lineTo(w, midY);
+        ctx.stroke();
+    }
 
     myFunctions.reloadChessEngine = function() {
         console.log(`Reloading the chess engine!`);
@@ -3614,6 +3701,10 @@ function main() {
             board.parentElement.appendChild(evalBarContainer);
             board.parentElement.appendChild(evalText);
             board.parentElement.appendChild(openingDisplay);
+            var evalSparklineCanvas = document.createElement('canvas');
+            evalSparklineCanvas.id = 'evalSparklineCanvas';
+            evalSparklineCanvas.style = 'position: absolute; bottom: -30px; left: -5px; width: 160px; height: 26px; z-index: 101; border-radius: 3px;';
+            board.parentElement.appendChild(evalSparklineCanvas);
 
             // Create main container with header
             var div = document.createElement('div');
