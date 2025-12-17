@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Chess AI
 // @namespace    github.com/longkidkoolstar
-// @version      4.1.4
+// @version      4.1.5
 // @description  Chess.com Bot/Cheat that finds the best move with evaluation bar and ELO control!
 // @author       longkidkoolstar
 // @license      none
@@ -20,7 +20,7 @@
 // ==/UserScript==
 
 
-const currentVersion = '4.1.4'; // Updated version number
+const currentVersion = '4.1.5'; // Updated version number
 
 function main() {
 
@@ -613,6 +613,72 @@ function main() {
         //console.log(str2);
         return str2;
     }
+    myFunctions.calculateHumanLikeDelay = function(skillLevel) {
+        let minDelay, maxDelay;
+
+        switch(skillLevel) {
+            case 'beginner': minDelay = 3.0; maxDelay = 10.0; break;
+            case 'casual': minDelay = 2.0; maxDelay = 7.0; break;
+            case 'intermediate': minDelay = 1.5; maxDelay = 5.0; break;
+            case 'advanced': minDelay = 1.0; maxDelay = 3.5; break;
+            case 'expert': minDelay = 0.6; maxDelay = 2.0; break;
+            default: minDelay = 1.5; maxDelay = 5.0;
+        }
+
+        // Opening phase speedup (first 10 moves)
+        // Humans typically play openings quickly from memory
+        try {
+            if (typeof board !== 'undefined' && board && board.game) {
+                // Try to get move number if available, otherwise assume it's opening if history is short
+                let moveNumber = -1;
+                if (typeof board.game.getMoveNumber === 'function') {
+                    moveNumber = board.game.getMoveNumber();
+                }
+                
+                // If we are in the opening phase (first 8-10 moves)
+                if (moveNumber > 0 && moveNumber <= 10) {
+                    console.log(`Opening phase (move ${moveNumber}) - speeding up`);
+                    // Significant speedup for openings - strictly under 1 second as requested
+                    maxDelay = 0.8; 
+                    minDelay = 0.1;
+                }
+            }
+        } catch(e) {
+            console.log("Error checking opening phase:", e);
+        }
+
+        // Check if move is obvious (forced or much better than others)
+        let isObvious = false;
+        if (myVars.topMoves && myVars.topMoves.length > 0) {
+            if (myVars.topMoves.length === 1) {
+                isObvious = true; // Only one legal move
+            } else if (myVars.topMoves.length >= 2) {
+                const bestEval = myVars.topMoves[0].evaluation;
+                const secondEval = myVars.topMoves[1].evaluation;
+                const diff = Math.abs(bestEval - secondEval);
+
+                // If evaluation difference is significant, it's an obvious choice
+                if (diff > 1.5) isObvious = true;
+
+                // Check for Mate in 1 or 2
+                if (myVars.topMoves[0].isMate) {
+                     const movesToMate = Math.abs(bestEval); // usually stored as +/- moves
+                     if (movesToMate <= 2) isObvious = true;
+                }
+            }
+        }
+
+        // Speed up for obvious moves
+        if (isObvious) {
+            console.log("Move identified as obvious/forced - speeding up");
+            maxDelay *= 0.4;
+            minDelay = Math.max(0.1, minDelay * 0.4);
+        }
+
+        let delay = Math.random() * (maxDelay - minDelay) + minDelay;
+        return delay;
+    };
+
     myFunctions.color = function(dat){
         response = dat;
         var res1 = response.substring(0, 2);
@@ -638,27 +704,60 @@ function main() {
             myFunctions.sendServerUpdate();
         }
 
-        if(myVars.autoMove == true){
-            // Calculate delay based on clock synchronization if enabled
-            const clockSyncDelay = myFunctions.calculateClockSyncDelay();
+        // Determine if we should auto move
+        // Case 1: Human Mode is OFF, and Standard Auto Move is ON
+        // Case 2: Human Mode is ON, and Human Auto Move is ON
+        let shouldAutoMove = false;
+        let isHumanAutoMove = false;
 
-            if (clockSyncDelay > 0) {
-                console.log(`Auto move: Applying clock sync delay of ${clockSyncDelay/1000}s`);
+        if (myVars.humanMode && myVars.humanMode.active) {
+            // Human Mode Active: Check Human Auto Move toggle
+            if (myVars.humanAutoMove === true) {
+                shouldAutoMove = true;
+                isHumanAutoMove = true;
+            }
+        } else {
+            // Standard Mode: Check Standard Auto Move toggle
+            if (myVars.autoMove === true) {
+                shouldAutoMove = true;
+                isHumanAutoMove = false;
+            }
+        }
+
+        if(shouldAutoMove){
+            if (isHumanAutoMove) {
+                // Human Auto Move Logic
+                const skillLevel = myVars.humanMode.level || 'intermediate';
+                const thinkingTime = myFunctions.calculateHumanLikeDelay(skillLevel);
+                console.log(`Human Auto Move (${skillLevel}): Delaying for ${thinkingTime.toFixed(1)} seconds...`);
+
                 setTimeout(() => {
                     myFunctions.movePiece(res1, res2);
+                    // Reset canGo for next turn
+                    setTimeout(() => { canGo = true; }, 500);
+                }, thinkingTime * 1000);
 
+            } else {
+                // Standard Auto Move Logic
+                // Calculate delay based on clock synchronization if enabled
+                const clockSyncDelay = myFunctions.calculateClockSyncDelay();
+
+                if (clockSyncDelay > 0) {
+                    console.log(`Auto move: Applying clock sync delay of ${clockSyncDelay/1000}s`);
+                    setTimeout(() => {
+                        myFunctions.movePiece(res1, res2);
+                        // After auto move, we need to reset canGo to allow auto run on next turn
+                        setTimeout(() => {
+                            canGo = true;
+                        }, 500);
+                    }, clockSyncDelay);
+                } else {
+                    myFunctions.movePiece(res1, res2);
                     // After auto move, we need to reset canGo to allow auto run on next turn
                     setTimeout(() => {
                         canGo = true;
                     }, 500);
-                }, clockSyncDelay);
-            } else {
-                myFunctions.movePiece(res1, res2);
-
-                // After auto move, we need to reset canGo to allow auto run on next turn
-                setTimeout(() => {
-                    canGo = true;
-                }, 500);
+                }
             }
         }
         isThinking = false;
@@ -1946,57 +2045,47 @@ function main() {
             myVars.lastMoveFromBook = false;
 
             // If human mode is active, simulate human play
-            if(myVars.humanMode && myVars.humanMode.active && myVars.alternativeMoves && myVars.alternativeMoves.length > 0) {
-                // Get the alternative moves (excluding the best move)
-                const alternatives = myVars.alternativeMoves.filter(move => move !== bestMove);
+            // WAIT! We already handle the delay in myFunctions.color() now for Auto Move.
+            // But we still need to delay the "display" of the move or the coloring if we want it to look like thinking?
+            // Actually, myFunctions.color() updates the best move and *then* triggers the auto-move.
+            // If we delay calling myFunctions.color(), we delay the visual feedback too.
+            // If we want instant visual feedback but delayed move, we should call myFunctions.color() immediately.
+            // However, the previous logic here was delaying the CALL to color(), which implies delaying the visual feedback.
+            // Let's assume the user wants the bot to "think" (no visual update) and then "play" (visual update + move).
+            // BUT, if Human Auto Move is ON, myFunctions.color() handles the move delay.
+            // If Human Auto Move is OFF, we probably just want to show the best move immediately?
+            // The previous logic was: if Human Mode is ON, delay EVERYTHING (visual + move).
 
-                // Simulate human play with thinking time
-                const moveToPlay = bestMove; // Default to best move
+            // Let's check if Human Auto Move is enabled.
+            // If Human Auto Move is ON, we rely on myFunctions.color() to handle the move delay.
+            // But we might still want to delay the *visual* indication of the best move to simulate "finding" it?
+            // Actually, usually users want to see the move ASAP but have it PLAYED with a delay.
+            // The previous implementation here delayed the whole thing.
 
-                // Simulate thinking time
-                const thinkingTime = Math.random() *
-                    (myVars.humanMode.moveTime.max - myVars.humanMode.moveTime.min) +
-                    myVars.humanMode.moveTime.min;
+            // Let's simplify:
+            // 1. Calculate best move.
+            // 2. Always show it immediately (so user knows what to play if they are playing manually).
+            // 3. Let myFunctions.color() handle the actual execution delay based on settings.
 
-                console.log(`Human mode: Thinking for ${thinkingTime.toFixed(1)} seconds...`);
+            // So we can remove this big block of "simulate human play" delay logic here,
+            // because myFunctions.color() now has the smarts to check for Human Auto Move and delay the execution.
+            
+            // However, the user might expect the "Human Mode" to also delay the *suggestion*? 
+            // Usually cheat users want the info instantly. The "Human Mode" usually refers to the *output* (moves played).
 
-                // Delay the move to simulate thinking
-                setTimeout(() => {
-                    // Select move based on human-like error rates
-                    const selectedMove = simulateHumanPlay(bestMove, alternatives);
+            // So I will revert this section to standard behavior: show immediately, let color() handle execution.
+            
+            myFunctions.color(bestMove);
+            isThinking = false;
+            myVars.engineRunning = false;
 
-                    // Play the selected move
-                    console.log(`Human mode: Playing ${selectedMove}`);
-                    myFunctions.color(selectedMove);
-
-                    // Reset alternative moves for next turn
-                    myVars.alternativeMoves = [];
-
-                    // Update auto run status if auto run is enabled
-                    if (myVars.autoRun) {
-                        myFunctions.updateAutoRunStatus('on');
-                    }
-                }, thinkingTime * 1000);
-
-                // Clear the thinking flag immediately to prevent multiple calls
-                isThinking = false;
-                myVars.engineRunning = false;
-            } else {
-                // Normal engine play (no human simulation)
-                myFunctions.color(bestMove);
-                isThinking = false;
-                myVars.engineRunning = false;
-
-                // Update auto run status if auto run is enabled
-                if (myVars.autoRun) {
-                    myFunctions.updateAutoRunStatus('on');
-                }
-
-                // Keep top moves for display on external board
-                // Only reset alternative moves
-                myVars.alternativeMoves = [];
-                console.log('Preserving top moves for external board:', myVars.topMoves);
+            // Update auto run status if auto run is enabled
+            if (myVars.autoRun) {
+                myFunctions.updateAutoRunStatus('on');
             }
+
+            // Reset alternative moves
+            myVars.alternativeMoves = [];
 
             // Update the server if external window is open
             if (myVars.useExternalWindow && myVars.externalWindowOpen && myVars.serverConnected) {
@@ -4282,6 +4371,20 @@ function main() {
                         <option value="expert">Expert (ELO ~2400)</option>
                     </select>
                 </div>
+
+                <div id="humanAutoMoveContainer" style="display: none; margin-top: 10px; padding-top: 10px; border-top: 1px solid #eee;">
+                     <div style="display: flex; align-items: center;">
+                        <label for="humanAutoMove" style="margin-right: 10px; font-weight: bold;">Human Auto Move:</label>
+                        <label class="switch">
+                            <input type="checkbox" id="humanAutoMove" name="humanAutoMove" value="false">
+                            <span class="slider"></span>
+                        </label>
+                     </div>
+                     <div style="font-size: 12px; color: #666; margin-top: 5px; font-style: italic;">
+                        Automatically plays moves using human-like timing and logic. Disables standard Clock Sync.
+                     </div>
+                </div>
+
                             <div id="humanModeInfo" style="font-size: 12px; color: #666; margin-top: 5px; font-style: italic;">
                     When enabled, the engine will play like a human with realistic mistakes and timing
                             </div>
@@ -4511,6 +4614,9 @@ function main() {
                         </div>
                         <div style="font-size: 12px; color: #666; margin-bottom: 10px;">
                             Automatically plays the best move for you
+                        </div>
+                        <div id="autoMoveNote" style="display: none; font-size: 11px; color: #856404; margin-top: 8px; padding: 6px; background-color: #fff3cd; border-radius: 4px; border: 1px solid #ffeaa7;">
+                            ⚠️ Disabled because Human Auto Move is active
                         </div>
 
                         <!-- Clock Synchronization Sub-section -->
@@ -5587,6 +5693,21 @@ function main() {
                 const isChecked = this.checked;
                 myFunctions.updateHumanMode(isChecked);
 
+                // Show/hide Human Auto Move container
+                const humanAutoMoveContainer = document.getElementById('humanAutoMoveContainer');
+                if (humanAutoMoveContainer) {
+                    humanAutoMoveContainer.style.display = isChecked ? 'block' : 'none';
+                }
+
+                // If Human Mode is turned OFF, we must also turn off Human Auto Move
+                // This ensures that when we turn Human Mode back ON, it starts fresh
+                // and also triggers the restoration of standard Auto Move / Clock Sync
+                if (!isChecked) {
+                    if ($('#humanAutoMove').prop('checked')) {
+                        $('#humanAutoMove').prop('checked', false).trigger('change');
+                    }
+                }
+
                 // Disable the ELO slider when human mode is enabled
                 $('#eloSlider').prop('disabled', isChecked);
 
@@ -5600,6 +5721,70 @@ function main() {
                 if (isChecked) {
                     const level = $('#humanModeSelect').val();
                     setHumanMode(level);
+                }
+            });
+
+            // Human Auto Move toggle
+            $('#humanAutoMove').on('change', function() {
+                myVars.humanAutoMove = this.checked;
+                console.log('Human Auto Move set to:', myVars.humanAutoMove);
+
+                const autoMoveNote = $('#autoMoveNote');
+                const autoMoveCheckbox = $('#autoMove');
+                const clockSyncCheckbox = $('#clockSync');
+                const clockSyncContainer = $('#clockSyncSection'); // Use section ID for dimming
+
+                if (this.checked) {
+                    // ENABLED: Save states and disable standard controls
+                    
+                    // Save current states if they haven't been saved yet (precaution)
+                    if (myVars.savedAutoMoveState === undefined) {
+                        myVars.savedAutoMoveState = autoMoveCheckbox.prop('checked');
+                    }
+                    if (myVars.savedClockSyncState === undefined) {
+                        myVars.savedClockSyncState = clockSyncCheckbox.prop('checked');
+                    }
+
+                    // Disable Standard Auto Move
+                    if (autoMoveCheckbox.prop('checked')) {
+                        // We set it to false but DON'T update the saved state here (we want the original)
+                        // Trigger change to update internal vars
+                        autoMoveCheckbox.prop('checked', false).trigger('change');
+                        // Restore the saved state variable because trigger('change') might have updated it via other listeners if we aren't careful
+                        // Actually, the listener just updates myVars.autoMove, which is fine.
+                    }
+                    autoMoveCheckbox.prop('disabled', true);
+                    autoMoveNote.show(); // Show the "Why is this disabled" note
+
+                    // Disable Clock Sync
+                    if (clockSyncCheckbox.prop('checked')) {
+                        clockSyncCheckbox.prop('checked', false).trigger('change');
+                    }
+                    clockSyncCheckbox.prop('disabled', true);
+                    clockSyncContainer.css('opacity', '0.5'); // Dim the container
+                    
+                } else {
+                    // DISABLED: Restore states and enable standard controls
+
+                    // Re-enable inputs
+                    autoMoveCheckbox.prop('disabled', false);
+                    clockSyncCheckbox.prop('disabled', false);
+                    autoMoveNote.hide();
+                    clockSyncContainer.css('opacity', '1');
+
+                    // Restore Standard Auto Move state if it was enabled before
+                    if (myVars.savedAutoMoveState) {
+                        autoMoveCheckbox.prop('checked', true).trigger('change');
+                    }
+                    
+                    // Restore Clock Sync state if it was enabled before
+                    if (myVars.savedClockSyncState) {
+                        clockSyncCheckbox.prop('checked', true).trigger('change');
+                    }
+                    
+                    // Clear saved states
+                    myVars.savedAutoMoveState = undefined;
+                    myVars.savedClockSyncState = undefined;
                 }
             });
 
