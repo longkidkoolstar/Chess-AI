@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Chess AI
 // @namespace    github.com/longkidkoolstar
-// @version      4.1.5
+// @version      4.1.6
 // @description  Chess.com Bot/Cheat that finds the best move with evaluation bar and ELO control!
 // @author       longkidkoolstar
 // @license      none
@@ -13,7 +13,6 @@
 // @grant       GM.getResourceText
 // @grant       GM.download
 // @resource    stockfish.js        https://raw.githubusercontent.com/longkidkoolstar/stockfish/refs/heads/main/stockfish.js
-// @require     https://greasyfork.org/scripts/445697/code/index.js
 // @require     https://code.jquery.com/jquery-3.6.0.min.js
 // @connect     localhost
 // @run-at      document-start
