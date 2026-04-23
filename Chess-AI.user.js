@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Chess AI
 // @namespace    github.com/longkidkoolstar
-// @version      4.1.6
+// @version      4.1.7
 // @description  Chess.com Bot/Cheat that finds the best move with evaluation bar and ELO control!
 // @author       longkidkoolstar
 // @license      none
@@ -19,7 +19,7 @@
 // ==/UserScript==
 
 
-const currentVersion = '4.1.6'; // Updated version number
+const currentVersion = '4.1.7'; // Updated version number
 
 function main() {
 
@@ -617,10 +617,16 @@ function main() {
 
         switch(skillLevel) {
             case 'beginner': minDelay = 3.0; maxDelay = 10.0; break;
+            case 'novice': minDelay = 2.5; maxDelay = 8.0; break;
             case 'casual': minDelay = 2.0; maxDelay = 7.0; break;
+            case 'club': minDelay = 1.8; maxDelay = 6.0; break;
             case 'intermediate': minDelay = 1.5; maxDelay = 5.0; break;
-            case 'advanced': minDelay = 1.0; maxDelay = 3.5; break;
-            case 'expert': minDelay = 0.6; maxDelay = 2.0; break;
+            case 'advanced': minDelay = 1.2; maxDelay = 4.0; break;
+            case 'expert': minDelay = 1.0; maxDelay = 3.5; break;
+            case 'master': minDelay = 0.8; maxDelay = 3.0; break;
+            case 'grandmaster': minDelay = 0.6; maxDelay = 2.5; break;
+            case 'supergm': minDelay = 0.4; maxDelay = 2.0; break;
+            case 'engine': minDelay = 0.1; maxDelay = 0.5; break;
             default: minDelay = 1.5; maxDelay = 5.0;
         }
 
@@ -709,18 +715,14 @@ function main() {
         let shouldAutoMove = false;
         let isHumanAutoMove = false;
 
-        if (myVars.humanMode && myVars.humanMode.active) {
+        if (myVars.humanMode && myVars.humanMode.active && myVars.humanAutoMove === true) {
             // Human Mode Active: Check Human Auto Move toggle
-            if (myVars.humanAutoMove === true) {
-                shouldAutoMove = true;
-                isHumanAutoMove = true;
-            }
-        } else {
+            shouldAutoMove = true;
+            isHumanAutoMove = true;
+        } else if (myVars.autoMove === true) {
             // Standard Mode: Check Standard Auto Move toggle
-            if (myVars.autoMove === true) {
-                shouldAutoMove = true;
-                isHumanAutoMove = false;
-            }
+            shouldAutoMove = true;
+            isHumanAutoMove = false;
         }
 
         if(shouldAutoMove){
@@ -2395,18 +2397,28 @@ function main() {
         // Set appropriate depth limits based on ELO
         // Lower ELO should use lower max depth to play more consistently
         let maxDepth;
-        if (elo < 1200) {
-            maxDepth = 5;  // Beginner level
-        } else if (elo < 1500) {
-            maxDepth = 8;  // Intermediate level
-        } else if (elo < 1800) {
-            maxDepth = 12; // Advanced level
-        } else if (elo < 2100) {
-            maxDepth = 15; // Expert level
-        } else if (elo < 2400) {
-            maxDepth = 18; // Master level
+        if (elo <= 800) {
+            maxDepth = 5;  // Beginner
+        } else if (elo <= 1000) {
+            maxDepth = 6;  // Novice
+        } else if (elo <= 1200) {
+            maxDepth = 8;  // Casual
+        } else if (elo <= 1400) {
+            maxDepth = 10; // Club
+        } else if (elo <= 1600) {
+            maxDepth = 12; // Intermediate
+        } else if (elo <= 1800) {
+            maxDepth = 14; // Advanced
+        } else if (elo <= 2000) {
+            maxDepth = 16; // Expert
+        } else if (elo <= 2200) {
+            maxDepth = 18; // Master
+        } else if (elo <= 2400) {
+            maxDepth = 20; // Grandmaster
+        } else if (elo <= 2600) {
+            maxDepth = 22; // Super GM
         } else {
-            maxDepth = 22; // Grandmaster level
+            maxDepth = 24; // Engine
         }
 
         // Store the max depth for this ELO
@@ -2414,11 +2426,9 @@ function main() {
 
         // Update the depth slider max value based on ELO (unless we're loading settings)
         if ($('#depthSlider')[0] && !skipDepthAdjustment) {
-            // Only update the max if the current value is higher than the new max
-            if (parseInt($('#depthSlider')[0].value) > maxDepth) {
-                $('#depthSlider')[0].value = maxDepth;
-                $('#depthText')[0].innerHTML = "Current Depth: <strong>" + maxDepth + "</strong>";
-            }
+            // Force the depth to match the appropriate depth for the ELO level
+            $('#depthSlider')[0].value = maxDepth;
+            $('#depthText')[0].innerHTML = "Current Depth: <strong>" + maxDepth + "</strong>";
 
             // Update the slider's max attribute
             $('#depthSlider')[0].max = maxDepth;
@@ -2468,11 +2478,23 @@ function main() {
                 errorRate = 0.3; // 30% chance of suboptimal moves
                 blunderRate = 0.15; // 15% chance of blunders
                 break;
+            case 'novice':
+                elo = 1000;
+                moveTime = { min: 1.5, max: 6 };
+                errorRate = 0.25;
+                blunderRate = 0.12;
+                break;
             case 'casual':
                 elo = 1200;
                 moveTime = { min: 2, max: 8 };
                 errorRate = 0.2;
                 blunderRate = 0.1;
+                break;
+            case 'club':
+                elo = 1400;
+                moveTime = { min: 2.5, max: 10 };
+                errorRate = 0.18;
+                blunderRate = 0.08;
                 break;
             case 'intermediate':
                 elo = 1600;
@@ -2481,16 +2503,40 @@ function main() {
                 blunderRate = 0.05;
                 break;
             case 'advanced':
+                elo = 1800;
+                moveTime = { min: 4, max: 14 };
+                errorRate = 0.12;
+                blunderRate = 0.04;
+                break;
+            case 'expert':
                 elo = 2000;
                 moveTime = { min: 5, max: 15 };
                 errorRate = 0.1;
                 blunderRate = 0.03;
                 break;
-            case 'expert':
+            case 'master':
+                elo = 2200;
+                moveTime = { min: 6, max: 18 };
+                errorRate = 0.08;
+                blunderRate = 0.02;
+                break;
+            case 'grandmaster':
                 elo = 2400;
                 moveTime = { min: 8, max: 20 };
                 errorRate = 0.05;
                 blunderRate = 0.01;
+                break;
+            case 'supergm':
+                elo = 2600;
+                moveTime = { min: 5, max: 12 };
+                errorRate = 0.02;
+                blunderRate = 0.005;
+                break;
+            case 'engine':
+                elo = 2800;
+                moveTime = { min: 2, max: 8 };
+                errorRate = 0.0;
+                blunderRate = 0.0;
                 break;
             default:
                 elo = 1600; // Default to intermediate
@@ -4364,10 +4410,16 @@ function main() {
                                 </div>
                                 <select id="humanModeSelect" style="width: 100%; padding: 8px; margin-top: 5px; border-radius: 4px; border: 1px solid #ddd;">
                         <option value="beginner">Beginner (ELO ~800)</option>
+                        <option value="novice">Novice (ELO ~1000)</option>
                         <option value="casual">Casual (ELO ~1200)</option>
+                        <option value="club">Club (ELO ~1400)</option>
                         <option value="intermediate" selected>Intermediate (ELO ~1600)</option>
-                        <option value="advanced">Advanced (ELO ~2000)</option>
-                        <option value="expert">Expert (ELO ~2400)</option>
+                        <option value="advanced">Advanced (ELO ~1800)</option>
+                        <option value="expert">Expert (ELO ~2000)</option>
+                        <option value="master">Master (ELO ~2200)</option>
+                        <option value="grandmaster">Grandmaster (ELO ~2400)</option>
+                        <option value="supergm">Super GM (ELO ~2600)</option>
+                        <option value="engine">Engine (ELO ~2800)</option>
                     </select>
                 </div>
 
@@ -5569,9 +5621,19 @@ function main() {
                         <td style="padding: 8px; border: 1px solid #ddd;">Quick moves, frequent mistakes, occasional blunders</td>
                     </tr>
                     <tr>
+                        <td style="padding: 8px; border: 1px solid #ddd;"><strong>Novice</strong></td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">~1000</td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">Basic play, common mistakes</td>
+                    </tr>
+                    <tr>
                         <td style="padding: 8px; border: 1px solid #ddd;"><strong>Casual</strong></td>
                         <td style="padding: 8px; border: 1px solid #ddd;">~1200</td>
                         <td style="padding: 8px; border: 1px solid #ddd;">Moderate thinking time, common mistakes</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; border: 1px solid #ddd;"><strong>Club</strong></td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">~1400</td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">Solid play, occasional tactical errors</td>
                     </tr>
                     <tr>
                         <td style="padding: 8px; border: 1px solid #ddd;"><strong>Intermediate</strong></td>
@@ -5580,13 +5642,33 @@ function main() {
                     </tr>
                     <tr>
                         <td style="padding: 8px; border: 1px solid #ddd;"><strong>Advanced</strong></td>
-                        <td style="padding: 8px; border: 1px solid #ddd;">~2000</td>
-                        <td style="padding: 8px; border: 1px solid #ddd;">Careful consideration, infrequent mistakes</td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">~1800</td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">Careful consideration, rare mistakes</td>
                     </tr>
                     <tr>
                         <td style="padding: 8px; border: 1px solid #ddd;"><strong>Expert</strong></td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">~2000</td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">Deep analysis, very rare mistakes</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; border: 1px solid #ddd;"><strong>Master</strong></td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">~2200</td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">Master level analysis</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; border: 1px solid #ddd;"><strong>Grandmaster</strong></td>
                         <td style="padding: 8px; border: 1px solid #ddd;">~2400</td>
-                        <td style="padding: 8px; border: 1px solid #ddd;">Deep analysis, rare mistakes, very rare blunders</td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">Grandmaster level play</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; border: 1px solid #ddd;"><strong>Super GM</strong></td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">~2600</td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">Elite Grandmaster level play</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; border: 1px solid #ddd;"><strong>Engine</strong></td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">~2800+</td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">Maximum strength, near perfect play</td>
                     </tr>
                 </table>
 
